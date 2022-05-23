@@ -1,0 +1,19 @@
+# A typical Rakefile
+# A typical Rakefile
+
+PORT  = 6044
+HOSTS = 192.168.2.179 hostname2 hostname3:6333
+
+actionset1:
+    echo starting actionset1
+    remote-cc -c ../testing/program.c
+        requires ../testing/program.c ../testing/program.h ../testing/allfunctions.h
+    remote-cc -c ../testing/square.c
+        requires ../testing/square.c ../testing/allfunctions.h
+    remote-cc -c ../testing/cube.c
+        requires ../testing/cube.c ../testing/allfunctions.h
+
+actionset2:
+    echo starting actionset2
+    remote-cc -o ../testing/program program.o square.o cube.o
+        requires program.o square.o cube.o
