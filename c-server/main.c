@@ -1,4 +1,5 @@
 #include <sys/wait.h>
+#include <dirent.h>
 #include "./c-server.h"
 #include "../common/strsplit.h"
 
@@ -30,37 +31,80 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-int exec_set(ActionSet *as) {
+int exec_set(ActionSet *as, char *tmpdir) {
     ExecPipes pipes[as->localcount];
 
     for (int i=0 ; i<as->localcount ; i++) {
-        pipes[i] = exec_cmd(as->local[i]->cmd, "/");
+        pipes[i] = exec_cmd(as->local[i]->cmd, tmpdir);
     }
     pid_t wpid;
     char buf[BUF_SIZE];
+    int err = 0, wstatus;
     do {
-        wpid = wait(NULL);
+        wpid = wait(&wstatus);
         for (int i=0 ; pipes[i].pid != wpid && i<as->localcount ; i++) {
             buf[0] = '\0';
             fgets(buf, BUF_SIZE, pipes[i].err);
-            if (strlen(buf) > 1) {
+            if (strlen(buf) > 0) {
                 buf[strcspn(buf, "\n")] = '\0';
                 as->local[i]->err = strdup(buf);
-                as->local[i]->status = 1;
-                return i;
+                as->local[i]->status = WEXITSTATUS(wstatus);
+                ++err;
+                break;
             } else {
                 buf[0] = '\0';
                 fgets(buf, BUF_SIZE, pipes[i].out);
                 buf[strcspn(buf, "\n")] = '\0';
                 as->local[i]->out = strdup(buf);
-                as->local[i]->status = 0;
+                as->local[i]->status = WEXITSTATUS(wstatus);
+                break;
             }
         }
-    } while (wpid > 0);
-    
-    return 0;
+    } while (wpid >= 0);
+
+    return err;
 }
 
+bool file_exists(char *filename) {
+  struct stat   buffer;   
+  return (stat (filename, &buffer) == 0);
+}
+
+void send_new_files(char *path, char **rec, int rk, int client) {
+    Message *msg;
+    char pathbuf[BUF_SIZE] = {0};
+    DIR *folder; // holds the dir
+    struct dirent *entry; //holds the file
+    struct stat st = {0}; //holds file data
+    folder = opendir(path);
+
+    while( (entry=readdir(folder)) ) {
+    //  SKIP CURRENT AND PARENT REFERENCES
+        snprintf(pathbuf, BUF_SIZE, "%s/%s", path, entry->d_name); //relative path
+        if (stat(pathbuf, &st) != -1 && S_ISREG(st.st_mode)) {
+            bool exists = false;
+            for (int i=0 ; i<rk ; i++) {
+                if (strcmp(entry->d_name, rec[i]) == 0){
+                    exists = true;
+                    break;
+                }
+
+            }
+            if (!exists) {
+                printf("%s\n", entry->d_name);
+                send_data(client, entry->d_name, CODE_OUT);
+                msg = recieve_data(client);
+                print_message(msg);
+                if (msg->header.type == CODE_OK) {
+                    if (send_bfile(client, pathbuf) < 0)
+                        exit(error("send_file() failed", EXIT_FAILURE));
+                    else
+                        printf("%s\n", entry->d_name);
+                }
+            }
+        }
+    }
+}
 void* client_handler(void* c) {
     pthread_detach(pthread_self());
 
@@ -68,12 +112,21 @@ void* client_handler(void* c) {
     puts("A client has been connected");
 
     int client = *((int*)c);
-    Message *msg;
+    Message *msg = malloc(sizeof(Message));
 
     ActionSet *as = malloc(sizeof(char *));
     as = new_set("ACTIONS");
 
-    int connected = 1;
+    char *tpath = NULL;
+    tpath = new_tmpd();
+    printf("OPERATING IN DIR \"%s\"\n", tpath);
+
+    char pathbuff[BUF_SIZE];
+    bool connected = true;
+    int ncmd;
+    char **rec = malloc(sizeof(char *));
+    int rk = 0;
+
     while (connected) {
 
         msg = recieve_data(client);
@@ -90,62 +143,65 @@ void* client_handler(void* c) {
 
         //  CLIENT REQUESTING TO SEND AND HAVE EXECUTED AN ACTIONSET
             case CODE_AS_START: {
-                as->remotecount = atoi(msg->data); // includes the count of actions in data
+                ncmd = atoi(msg->data); // includes the count of actions in data
                 send_data(client, "AWAITING COMMAND SET", CODE_OK);
                 break;
             }
 
         //  RECIEVE SINGLE COMMAND
             case CODE_ACTION: {
-                char *cmd = strdup(msg->data);
-                msg = recieve_data(client);
-            //  RECIEVE REQ COMMAND
-                if (msg->header.type == CODE_REQ) {
-                    add_cmd(as, cmd, msg->data);
-                    if (strcmp(msg->data, "none") != 0) {
-                        int count, recieved = 0;
-                        char **req;
-                        req = strsplit(&msg->data[8], &count);
-                        //int recieved[count] = { 0 };
-                        for (int i=0 ; i<count ; i++) {
-                            printf("recieving file \"%s\"\n", req[i]);
-                            if (recieve_file(client, req[i]) >= 0)
-                                recieved++;
-                            else
-                                send_data(client, "RECIEVE FAILED", CODE_FAIL);
-                        }
+                add_cmd(as, msg->data, NULL);
+                break;
+            }
+
+        //  RECIEVE REQ COMMAND
+            case CODE_REQ: {
+                memset(&pathbuff, 0, BUF_SIZE);
+                snprintf(pathbuff, BUF_SIZE, "%s/%s", tpath, msg->data);
+                if (!file_exists(pathbuff)) {
+                    send_data(client, "NEED REQ", CODE_OK);
+                    if ((recieve_file(client, pathbuff) < 0)) {
+                        send_data(client, "FILE RECIEVE FAILED", CODE_FAIL);
+                        connected = 0;
+                        break;
+                    } else {
+                        rec[rk++] = strdup(msg->data);
+                        rec = realloc(rec, (rk + 1) * sizeof(char *));
                     }
-                    printf("[%d|%d] CMD: %s REQ: %s\n", as->remotecount, as->localcount, cmd, msg->data);
                 } else {
-                    send_data(client, "REQ NOT SUPPLIED FOR AS", CODE_FAIL);
-                    connected = 0;
-                    break;
+                    send_data(client, "DONT NEED REQ", CODE_BAD);
+                    printf("file exists \"%s\"\n", pathbuff);
                 }
                 break;
             }
         //  CLIENT SIGNALLING ALL ACTIONSET COMMANDS HAVE BEEN SENT
-            case CODE_AS_END: {
+            case CODE_AS_EXECUTE: {
             //  ENSURE WE HAVE RECIEVED ALL ACTION SETS
-                if (as->remotecount == as->localcount) {
+                if (ncmd == as->localcount) {
                     send_data(client, "RECIEVED, EXECUTING", CODE_OK);
                     int failed;
-                    if ((failed = exec_set(as)) > 0) {
+                    printf("%d\n", failed);
+                    if ((failed = exec_set(as, tpath)) > 0) { // execute inside the tmpdir
                         puts("actionset finished executing unsuccessfully");
                         send_data(client, as->local[failed]->err, CODE_ACTION_STATUS + failed);
                     } else {
                         puts("actionset finished executing successfully");
-                        send_data(client, "EXEC COMPLETE", CODE_OK);
+
+                        send_new_files(tpath, rec, rk, client);
                     }
-                connected = 0;
             //  OTHERWISE ALERT CLIENT
                 } else {
                     send_data(client, "INCOMPLETE SET", CODE_FAIL);
+                    connected = false;
                 }
+                print_set(as, 1);
                 break;
             }
-            
         }
     }
+    memset(&pathbuff, 0, BUF_SIZE);
+    snprintf(pathbuff, BUF_SIZE, "rm -r -d %s", tpath);
+    //exec_cmd(pathbuff, "./");
 
     puts("Client Disconnected");
     close(client);

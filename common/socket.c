@@ -123,6 +123,8 @@ int recieve_file(int socket, char *filepath) {
     if (fp == NULL)
         return error("invalid filepath", -1);
 
+    printf("\nrecieving file \"%s\"\n", filepath);
+    printf("-----------------------------------------------------\n");
     while (1)
     {
         msg = recieve_data(socket);
@@ -131,32 +133,113 @@ int recieve_file(int socket, char *filepath) {
             fprintf(fp, "%s", msg->data);
             printf("%s", msg->data);
         } else if (msg->header.type == CODE_FILE_END) {
-            send_data(socket, "file transfer was successful", CODE_OK);
-            break;
+            fclose(fp);
+            send_data(socket, "file transfer success", CODE_OK);
+            printf("-----------------------------------------------------\n");
+            return 0;
         } else {
             fclose(fp);
             send_data(socket, "file transfer failed", CODE_FAIL);
+            printf("-----------------------------------------------------\n");
             return error("file transfer failed", -1); 
         }
+    }
+    fclose(fp);
+    printf("-----------------------------------------------------\n");
+    return 0;
+}
+
+int send_file(int socket, char *filepath) {
+    printf("Sending %s\n", filepath);
+    FILE *fp;
+    Message *msg;
+
+    char buffer[BUF_SIZE] = {0};
+
+    fp = fopen(filepath, "r");
+
+    if (fp == NULL)
+        return error("could not open file", -1);
+
+    while (fgets(buffer, BUF_SIZE, fp))
+        send_data(socket, buffer, CODE_FILE);
+
+    send_data(socket, filepath, CODE_FILE_END);
+    msg = recieve_data(socket);
+    print_message(msg);
+    fclose(fp);
+    return 0;
+}
+
+int recieve_bfile(int socket, char *filepath) {
+    FILE *fp;
+
+    char buf[BUF_SIZE] = {0};
+
+    fp = fopen(filepath, "wb+");
+    if (fp == NULL)
+        return error("invalid filepath", -1);
+
+    printf("\nrecieving file \"%s\"\n", filepath);
+
+    HEADER header = {0};
+    if (recv(socket, &header, sizeof(HEADER), 0) < 0) // recieve length
+        exit(error("recv() failed", EXIT_FAILURE));
+    if (header.type == CODE_FILE) {
+        uint32_t total = 0;
+        if(recv(socket, &total, header.length, 0) < 0) // the files length into variable total
+            exit(error("recv() failed", EXIT_FAILURE));
+        printf("TOTOAL: %d\n", total);
+        // write in binary
+        int length = 0;
+        while ((length = recv(socket, buf, BUF_SIZE, 0)) && total > 0) {
+            fwrite(buf, sizeof (char), length, fp);
+            if (strlen(buf) > 0) {
+                printf("received: %d\n", (int)strlen(buf));
+                total -= length;
+                memset(&buf, 0, sizeof (buf));
+            }
+        }
+        printf("File '%s' received.\n", filepath);
     }
     fclose(fp);
     return 0;
 }
 
-int send_file(int socket, char *filepath) {
+int send_bfile(int socket, char *filepath) {
+    printf("Sending %s\n", filepath);
     FILE *fp;
+    
+    char buf[BUF_SIZE] = {0};
 
-    char buffer[BUF_SIZE] = {0};
+    fp = fopen(filepath, "rb+");
 
-    fp = fopen(filepath, "r");
     if (fp == NULL)
         return error("could not open file", -1);
 
-    while(fgets(buffer, BUF_SIZE, fp)!=NULL)
-        send_data(socket, buffer, CODE_FILE);
+    fseek(fp, 0L, SEEK_END);
+    uint32_t sz = ftell(fp);
+    
+    HEADER header = {0};
 
-    send_data(socket, filepath, CODE_FILE_END);
+    header.type = CODE_FILE;
+    header.length = sizeof(uint32_t);
+    if (send(socket, &header, sizeof(HEADER), 0) < 0) // send length
+        exit(error("send() failed", EXIT_FAILURE));
+    if (send(socket, &sz, sizeof(sz), 0) < 0) // send data
+        exit(error("send() failed", EXIT_FAILURE));
+
+
+    int length = 0, total = 0;
+    while ((length = fread(buf, sizeof (char), BUF_SIZE, fp)) > 0) {
+        printf("Length : '%d'\n", length);
+        send(socket, buf, length, 0);
+        memset(&buf, 0, BUF_SIZE);
+        total += length;
+    }
+    printf("File '%s' transfered!\n", filepath);
     fclose(fp);
 
     return 0;
 }
+

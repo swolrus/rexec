@@ -1,7 +1,5 @@
 #include "./common.h"
 
-// CONSTANTS
-#define BUF_SIZE 1024 // string buffer size
 
 int error(char *msg, int e) {
     fprintf(stderr, "%s%s\n", ERROR_PREFIX, msg);
@@ -11,6 +9,20 @@ int error(char *msg, int e) {
 void cleanup(int pipe_pair[2]) {
     close(pipe_pair[0]);
     close(pipe_pair[1]);
+}
+
+char *new_tmpd() {
+//  CREATE /TMP IF DOES NOT EXIST
+    struct stat st = {0};
+    if (stat(TMPDIR, &st) == -1) {
+        if (mkdir(TMPDIR, S_IRWXU) == -1)
+            exit(error("could not create /tmp", EXIT_FAILURE));
+    }
+//  CREATE DIR TO STORE FILES IN AND RETURN
+    char *tpath = strdup(TMPDIR_FORMAT);
+    if ((mkdtemp(tpath)) == NULL)
+        exit(error("could not generate tmp directory", EXIT_FAILURE));
+    return tpath;
 }
 
 ActionSet *new_set(char *name) {
@@ -149,9 +161,9 @@ ExecPipes exec_cmd(char *command, char *path) {
             // cleanup(stdin_pair);
 
             char buffer[BUF_SIZE];
-            snprintf(buffer, BUF_SIZE, "cd %s1 > /dev/null 2> /dev/null; %s", path, command);
+            snprintf(buffer, BUF_SIZE, "cd %s; %s", path, command);
 
-            execl("/bin/sh", "sh", "-c", command, NULL);
+            execl("/bin/sh", "sh", "-c", buffer, NULL);
 
             exit(error("execl() failed", EXIT_FAILURE));
             break;

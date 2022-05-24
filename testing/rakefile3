@@ -1,0 +1,14 @@
+# A typical Rakefile
+# A typical Rakefile
+
+PORT  = 6044
+HOSTS = 192.168.2.179 hostname2 hostname3:6333
+
+actionset1:
+    echo starting actionset1
+    remote-cat cube.c
+        requires cube.c
+
+actionset2:
+    echo starting actionset2
+    remote-adsf

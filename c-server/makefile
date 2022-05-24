@@ -5,7 +5,7 @@ HEADERS =  $(PROJECT).h common.h
 OBJ     =  main.o ../common/socket.o ../common/common.o
 
 C99     =  cc -std=c99
-CFLAGS  =  -I"../common" -Wall -Werror
+CFLAGS  =  -I"../common" -Wall -Werror -pthread
 
 
 $(PROJECT) : $(OBJ)

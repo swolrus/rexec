@@ -7,7 +7,7 @@
 // main.c
 extern char *           trim_line(char *);
 extern Rake *           rake_from_file(char *);
-extern int              exec_local_set(ActionSet *);
+extern int              exec_local_set(ActionSet *, char *);
 
 // rake.c
 extern Rake *           new_rake(char *);
