@@ -100,9 +100,9 @@ extern char *           new_tmpd(); // creates ./tmp if it doesn't exist and ret
 extern ExecPipes        exec_cmd(char *, char *);
 extern ActionSet *      new_set(char *);
 extern void             free_set(ActionSet *);
-extern void             print_set(ActionSet *, int);
+extern void             print_set(ActionSet *, bool);
 extern void             add_cmd(ActionSet *, char *, char *); // test for 'remote-' and add new cmd struct to the action set
-extern void             print_cmd(Command *, int);
+extern void             print_cmd(Command *, bool);
 extern void             free_cmd(Command *);
 
 // socket.c

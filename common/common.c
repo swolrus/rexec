@@ -1,16 +1,29 @@
 #include "./common.h"
 
-
+/**
+ * clean error message with optional compact return
+ * @param  msg the error message
+ * @param  e   int to return, set to NULL if not req
+ * @return     an int, can be used to exit with this function as param
+ *                or to pass the appropriate return
+ */
 int error(char *msg, int e) {
     fprintf(stderr, "%s%s\n", ERROR_PREFIX, msg);
     return e;
 }
 
+/**
+ * Helper to close pipes
+ */
 void cleanup(int pipe_pair[2]) {
     close(pipe_pair[0]);
     close(pipe_pair[1]);
 }
 
+/**
+ * creates dir /tmp and then a randomly generated subdir
+ * @return the path of the new dir
+ */
 char *new_tmpd() {
 //  CREATE /TMP IF DOES NOT EXIST
     struct stat st = {0};
@@ -25,6 +38,11 @@ char *new_tmpd() {
     return tpath;
 }
 
+/**
+ * Allocate a new action set
+ * @param  name of the set
+ * @return      returns the new sets location
+ */
 ActionSet *new_set(char *name) {
     ActionSet *atmp = NULL;
     atmp = malloc(sizeof(ActionSet));
@@ -36,6 +54,9 @@ ActionSet *new_set(char *name) {
     return atmp;
 }
 
+/**
+ * free a sets memory
+ */
 void free_set(ActionSet *as) {
     free(as->name);
     free(as->local);
@@ -43,7 +64,12 @@ void free_set(ActionSet *as) {
     free(as);
 }
 
-void print_set(ActionSet *as, int remote) {
+/**
+ * print a set
+ * @param as     the set to print
+ * @param remote if true will print a more verbose but more compact version
+ */
+void print_set(ActionSet *as, bool remote) {
     int i;
     printf("\n[ %s ]\n", as->name);
     printf("Local:\n");
@@ -61,6 +87,12 @@ void print_set(ActionSet *as, int remote) {
     }
 }
 
+/**
+ * Will create a new command in the correct subset of actionset as
+ * @param as       The target set
+ * @param command  The command text
+ * @param requires The requirements text
+ */
 void add_cmd(ActionSet *as, char *command, char *requires) {
     Command *cmd = NULL;
     cmd = malloc(sizeof(Command));
@@ -100,6 +132,9 @@ void add_cmd(ActionSet *as, char *command, char *requires) {
     
 }
 
+/**
+ * Free command memory
+ */
 void free_cmd(Command *cmd) {
     free(cmd->cmd);
     free(cmd->req);
@@ -108,13 +143,26 @@ void free_cmd(Command *cmd) {
     free(cmd);
 }
 
-void print_cmd(Command *cmd, int req) {
+/**
+ * print a command
+ * @param cmd the command struct to be printed
+ * @param req if 1 will print a more verbose version for when errors are present
+ */
+void print_cmd(Command *cmd, bool req) {
     if (req == 0)
         printf("-%s\n  - %s\n", cmd->cmd, cmd->req);
     else
         printf("[%d](%s)\nOUT: %s\nERR: %s\n", cmd->status, cmd->cmd, cmd->out, cmd->err);
 }
 
+/**
+ * create a child to execute a command via execl
+ * also link its stdout/stderr to pipes accessible from the parent
+ * 
+ * @param  command the command text to execute
+ * @param  path    the path to execute the command at (relative)
+ * @return         a struct containing the pipes
+ */
 ExecPipes exec_cmd(char *command, char *path) {
     ExecPipes result = {.out = NULL, .err = NULL, .in=NULL};
     //int wstatus;

@@ -3,13 +3,13 @@
 
 #include "../common/common.h"
 
-// GLOBAL FUNCTIONS
+// FUNCTIONS
+
 // main.c
-extern char *           trim_line(char *);
-extern Rake *           rake_from_file(char *);
-extern int              exec_local_set(ActionSet *, char *);
+extern int              negotiate_set(ActionSet *, char *);
 
 // rake.c
+extern Rake *           rake_from_file(char *);
 extern Rake *           new_rake(char *);
 extern void             free_rake(Rake *);
 extern void             print_rake(Rake *);

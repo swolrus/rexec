@@ -1,7 +1,12 @@
 #include "./c-client.h"
 #include "../common/common.h"
 
-
+/**
+ * Trims leading whitespace and replaces newline character
+ * 
+ * @param  linestart pointer to start of line to be trimmed
+ * @return           a pointer to the same string but trimmed
+ */
 char *trim_line(char *linestart) {
     while(*linestart == ' ' || *linestart == '\t' || *linestart == '=') {
         linestart++;
@@ -10,7 +15,13 @@ char *trim_line(char *linestart) {
     return linestart;
 }
 
-
+/**
+ * finds port int and truncates param h
+ * replaces colon with null pointer leaving original string in tact
+ * 
+ * @param  h pointer to host of format hostname:00000
+ * @return   the integer value of digits following ':'
+ */
 int find_port(char * h) {
     char *port = h;
     while (*port != ':') {
@@ -22,6 +33,11 @@ int find_port(char * h) {
     return atoi(port);
 }
 
+/**
+ * allocates memory for the Rake struct
+ * @param  filename the name of the file this rake will represent
+ * @return          returns the allocated rake
+ */
 Rake *new_rake(char *filename) {
     Rake *rtmp = NULL;
     rtmp = malloc(sizeof(Rake));
@@ -34,6 +50,10 @@ Rake *new_rake(char *filename) {
     return rtmp;
 }
 
+/**
+ * free a rakes memory
+ * @param r target
+ */
 void free_rake(Rake *r) {
     free(r->filename);
     for (int i=0 ; i<r->hostcount ; i++) {
@@ -46,6 +66,10 @@ void free_rake(Rake *r) {
     free(r);
 }
 
+/**
+ * print a rake
+ * @param r target
+ */
 void print_rake(Rake *r) {
     int i;
 
@@ -60,6 +84,11 @@ void print_rake(Rake *r) {
     }
 }
 
+/**
+ * niaeve file parser constructs rake based on loose rules
+ * @param  filename file to be parsed
+ * @return          a new memory location containing the rake
+ */
 Rake *rake_from_file(char *filename) {
     char *linestart;
 

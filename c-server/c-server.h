@@ -5,10 +5,9 @@
 
 #include "../common/common.h"
 
-extern void*            client_handler(void*);
-extern int              h_connect(Host *);
-extern Message          *recieve_data(int);
-extern void             send_data(int, char *, int);
-extern void             print_message(Message *);
+extern int              exec_set(ActionSet *, char *); // execute a as
+extern bool             file_exists(char *);
+extern void*            client_handler(void*); // deals with logic flow after accepting a client
+extern void             send_new_files(char *, char **, int, int);
 
 #endif  // C_SERVER_H_

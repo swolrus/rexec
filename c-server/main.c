@@ -9,12 +9,12 @@ int main(int argc, char *argv[])
     struct sockaddr_in cli_addr;
     socklen_t clilen = sizeof(cli_addr);
 
-    if (argc < 2)
+    if (argc < 3)
         exit(error("no port provided", EXIT_FAILURE));
 
-    Host server = { .socket = -1, .hostname = NULL, .port = 6044 };
+    Host server = { .socket = -1, .hostname = argv[1], .port = atoi(argv[2]) };
 
-    h_connect(&server);
+    h_connect(&server); // populates our struct
     listen(server.socket, 5);
 
     pthread_t t_id;
@@ -60,14 +60,14 @@ int exec_set(ActionSet *as, char *tmpdir) {
                 break;
             }
         }
-    } while (wpid >= 0);
+    } while (wpid > 0);
 
     return err;
 }
 
-bool file_exists(char *filename) {
+bool file_exists(char *filepath) {
   struct stat   buffer;   
-  return (stat (filename, &buffer) == 0);
+  return (stat (filepath, &buffer) == 0); // if stat works then file exists
 }
 
 void send_new_files(char *path, char **rec, int rk, int client) {
@@ -79,24 +79,23 @@ void send_new_files(char *path, char **rec, int rk, int client) {
     folder = opendir(path);
 
     while( (entry=readdir(folder)) ) {
-    //  SKIP CURRENT AND PARENT REFERENCES
-        snprintf(pathbuf, BUF_SIZE, "%s/%s", path, entry->d_name); //relative path
-        if (stat(pathbuf, &st) != -1 && S_ISREG(st.st_mode)) {
+        snprintf(pathbuf, BUF_SIZE, "%s/%s", path, entry->d_name); // build path
+        if (stat(pathbuf, &st) != -1 && S_ISREG(st.st_mode)) { // if stat succeeds and the object is a file
             bool exists = false;
-            for (int i=0 ; i<rk ; i++) {
+            for (int i=0 ; i<rk ; i++) { // then needs to be tested against the requirements
                 if (strcmp(entry->d_name, rec[i]) == 0){
                     exists = true;
                     break;
                 }
 
             }
-            if (!exists) {
+            if (!exists) { // if the file was found to not be one of the sent requirements
                 printf("%s\n", entry->d_name);
                 send_data(client, entry->d_name, CODE_OUT);
                 msg = recieve_data(client);
                 print_message(msg);
                 if (msg->header.type == CODE_OK) {
-                    if (send_bfile(client, pathbuf) < 0)
+                    if (send_bfile(client, pathbuf) < 0) // we then want to send it back as it's an obj file
                         exit(error("send_file() failed", EXIT_FAILURE));
                     else
                         printf("%s\n", entry->d_name);
@@ -105,6 +104,8 @@ void send_new_files(char *path, char **rec, int rk, int client) {
         }
     }
 }
+
+
 void* client_handler(void* c) {
     pthread_detach(pthread_self());
 

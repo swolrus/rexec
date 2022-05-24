@@ -1,5 +1,11 @@
 #include "common.h"
 
+/**
+ * allocate a new host
+ * @param  host the hostname
+ * @param  port the port
+ * @return      the new host
+ */
 Host *new_host(char *host, int port) {
     Host *htmp = NULL;
     htmp = malloc(sizeof(Host *));
@@ -10,10 +16,16 @@ Host *new_host(char *host, int port) {
     return htmp;
 }
 
+/**
+ * print a host
+ */
 void print_host(Host *h) {
     printf("Host (%s:%d) -> %d\n", h->hostname, h->port, h->socket);
 }
 
+/**
+ * print a message (it's header and data)
+ */
 void print_message(Message *m) {
     if (m->header.length == 0)
         printf("%d\n", m->header.type);
@@ -21,17 +33,27 @@ void print_message(Message *m) {
         printf("(%d, %d)%s\n", m->header.type, m->header.length, m->data);
 }
 
+/**
+ * free a message
+ */
 void free_message(Message *m) {
     free(m->data);
     free(m);
 }
 
+/**
+ * connect to a host
+ * @param  h the host to connect to, h->socket will be modified to the host fd
+ * @return   also returns the host fd
+ */
 int c_connect(Host *h) {
 
+//  EXIT IF SOCKET ALREADY OPEN
     if (h->socket != -1) {
         return h->socket;
     }
 
+//  CREATE THE ADDRESS
     struct sockaddr_in serv_addr;
 
     memset(&serv_addr, 0, sizeof(serv_addr));
@@ -41,12 +63,15 @@ int c_connect(Host *h) {
     if((h->socket = socket(AF_INET, SOCK_STREAM, 0)) < 0)
         exit(error("socket() failed", EXIT_FAILURE));
 
+//  ALLOW SOCKET TO BE RE-USED (PREVENTS ERRORS STARTING AND STOPPING)
     if (setsockopt(h->socket, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) < 0)
         exit(error("setsockopt(SO_REUSEADDR) failed", EXIT_FAILURE));
 
+//  CONVERT THE ADDRESS
     if(inet_pton(AF_INET, h->hostname, &serv_addr.sin_addr)<=0)
         exit(error("invalid address", EXIT_FAILURE));
 
+//  CONNECT TO THE ADDRESS
     if (connect(h->socket, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
         exit(error("connect() failed", EXIT_FAILURE));
 
@@ -61,14 +86,17 @@ int h_connect(Host *h) {
     if((h->socket = socket(AF_INET, SOCK_STREAM, 0)) < 0)
         exit(error("socket() failed", EXIT_FAILURE));
 
+//  ALLOW SOCKET TO BE RE-USED (PREVENTS ERRORS STARTING AND STOPPING)
     if (setsockopt(h->socket, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) < 0)
         exit(error("setsockopt(SO_REUSEADDR) failed", EXIT_FAILURE));
 
+//  BUILD THE ADDRESS
     memset(&serv_addr, '\0', sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = INADDR_ANY;
     serv_addr.sin_port = htons(h->port);
 
+//  BIND SERVER TO THE ADDRESS
     if (bind(h->socket, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
         exit(error("bind() failed", EXIT_FAILURE));
 
@@ -76,6 +104,11 @@ int h_connect(Host *h) {
 
 }
 
+/**
+ * recieve char data
+ * @param  socket the socket to read from
+ * @return        returns a message struct containing header and data
+ */
 Message *recieve_data(int socket) {
     Message *msg = malloc(sizeof(Message));
     char buffer[BUF_SIZE] = {0};
@@ -98,6 +131,13 @@ Message *recieve_data(int socket) {
     return msg;
 }
 
+/**
+ * send a message in format readable by read_data()
+ * uses the struct Message
+ * @param socket the socket fd to write
+ * @param data   the char data to be written
+ * @param mtype  the message type integer to pass in the header
+ */
 void send_data(int socket, char *data, int mtype) {
     Message *msg = malloc(sizeof(Message));
 
@@ -115,6 +155,15 @@ void send_data(int socket, char *data, int mtype) {
     }
 }
 
+
+/**
+ * recieve a character file using recieve_data() line by line
+ * designed for use with source code as lines over BUF_SIZE will cause stack errors
+ * 
+ * @param  socket   the socket to send the file through
+ * @param  filepath the relative path of the file to write to
+ * @return          0 if succes -1 if failed
+ */
 int recieve_file(int socket, char *filepath) {
     FILE *fp;
     Message *msg;
@@ -149,6 +198,14 @@ int recieve_file(int socket, char *filepath) {
     return 0;
 }
 
+/**
+ * recieve a character file using send_data() line by line
+ * designed for use with source code as lines over BUF_SIZE will cause stack errors
+ * 
+ * @param  socket   the socket fd to write to
+ * @param  filepath the relative filepath of the file to be sent
+ * @return          0 if success -1 if fail
+ */
 int send_file(int socket, char *filepath) {
     printf("Sending %s\n", filepath);
     FILE *fp;
@@ -171,6 +228,12 @@ int send_file(int socket, char *filepath) {
     return 0;
 }
 
+/**
+ * Send binary data as a stream to be be used to send c object files
+ * @param  socket   the sending socket fd
+ * @param  filepath the relative path of the target file
+ * @return          0 if success -1 if fail
+ */
 int recieve_bfile(int socket, char *filepath) {
     FILE *fp;
 
@@ -182,13 +245,23 @@ int recieve_bfile(int socket, char *filepath) {
 
     printf("\nrecieving file \"%s\"\n", filepath);
 
+
     HEADER header = {0};
     if (recv(socket, &header, sizeof(HEADER), 0) < 0) // recieve length
         exit(error("recv() failed", EXIT_FAILURE));
+
     if (header.type == CODE_FILE) {
         uint32_t total = 0;
         if(recv(socket, &total, header.length, 0) < 0) // the files length into variable total
             exit(error("recv() failed", EXIT_FAILURE));
+
+        // up to here works, total will contain the n bytes sum
+        
+        /**
+         * TODO: find some method to properly track how many bytes have been written
+         *         below solution is hacky and currently broken
+         */
+        
         printf("TOTOAL: %d\n", total);
         // write in binary
         int length = 0;
@@ -196,7 +269,7 @@ int recieve_bfile(int socket, char *filepath) {
             fwrite(buf, sizeof (char), length, fp);
             if (strlen(buf) > 0) {
                 printf("received: %d\n", (int)strlen(buf));
-                total -= length;
+                total -= length; // this may be the culprit infinitely subtracting
                 memset(&buf, 0, sizeof (buf));
             }
         }
@@ -206,6 +279,12 @@ int recieve_bfile(int socket, char *filepath) {
     return 0;
 }
 
+/**
+ * send binary data to be used for such things as c object files
+ * @param  socket   the socket fd
+ * @param  filepath the target filepath to read and then send
+ * @return          0 if success -1 if failed
+ */
 int send_bfile(int socket, char *filepath) {
     printf("Sending %s\n", filepath);
     FILE *fp;
@@ -226,12 +305,17 @@ int send_bfile(int socket, char *filepath) {
     header.length = sizeof(uint32_t);
     if (send(socket, &header, sizeof(HEADER), 0) < 0) // send length
         exit(error("send() failed", EXIT_FAILURE));
+
     if (send(socket, &sz, sizeof(sz), 0) < 0) // send data
         exit(error("send() failed", EXIT_FAILURE));
 
+    // again up to here works
 
     int length = 0, total = 0;
     while ((length = fread(buf, sizeof (char), BUF_SIZE, fp)) > 0) {
+        /**
+         * TODO: find some method to track
+         */
         printf("Length : '%d'\n", length);
         send(socket, buf, length, 0);
         memset(&buf, 0, BUF_SIZE);

@@ -25,31 +25,21 @@ int main(int argc, char *argv[]) {
     printf("\nSTARTING EXECUTION\n");
 
     for (int i=0; i<rake->setcount; i++) {
-        int wstatus;
-        int pid;
-
-        pid = fork();
-
-        switch (pid) {
-            case -1:
-                exit(error("fork() failed", EXIT_FAILURE));
-            case 0: {
-                rake->sets[i]->socket = c_connect(rake->hosts[0]);
-                exec_local_set(rake->sets[i], dirpath);
-                exit(EXIT_SUCCESS);
-            }
-            default:
-            //  each actionset can only execute once previous is complete
-                wait(&wstatus);
-                break;
-        }
+    //  execute the action set
+        rake->sets[i]->socket = c_connect(rake->hosts[0]);
+        negotiate_set(rake->sets[i], dirpath);
     }
 
     return 0;
 }
 
 
-int exec_local_set(ActionSet *as, char *dirpath) {
+/**
+ * @param as set to be executed
+ * @param dirpath the directory to execute the command within
+ * @return 0 if exec is success -1 if failed
+ */
+int negotiate_set(ActionSet *as, char *dirpath) {
 //  GET COST
     send_data(as->socket, "", CODE_COST);
     response = recieve_data(as->socket);
