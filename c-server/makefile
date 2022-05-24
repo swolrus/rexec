@@ -2,7 +2,7 @@
 
 PROJECT =  c-server
 HEADERS =  $(PROJECT).h common.h
-OBJ     =  main.o socket.o ../common/socket.o ../common/common.o
+OBJ     =  main.o ../common/socket.o ../common/common.o
 
 C99     =  cc -std=c99
 CFLAGS  =  -I"../common" -Wall -Werror

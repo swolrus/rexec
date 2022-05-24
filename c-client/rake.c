@@ -22,17 +22,6 @@ int find_port(char * h) {
     return atoi(port);
 }
 
-ActionSet *new_set(char *name) {
-    ActionSet *atmp = NULL;
-    atmp = malloc(sizeof(ActionSet));
-    atmp->name = strdup(name);
-    atmp->localcount = 0;
-    atmp->remotecount = 0;
-    atmp->local = malloc(2 * sizeof(char *));
-    atmp->remote = malloc(2 * sizeof(char *));
-    return atmp;
-}
-
 Rake *new_rake(char *filename) {
     Rake *rtmp = NULL;
     rtmp = malloc(sizeof(Rake));
@@ -43,13 +32,6 @@ Rake *new_rake(char *filename) {
     rtmp->hosts = malloc(sizeof(Host *));
     rtmp->sets = malloc(sizeof(ActionSet *));
     return rtmp;
-}
-
-void free_set(ActionSet *as) {
-    free(as->name);
-    free(as->local);
-    free(as->remote);
-    free(as);
 }
 
 void free_rake(Rake *r) {
@@ -64,35 +46,6 @@ void free_rake(Rake *r) {
     free(r);
 }
 
-void print_set(ActionSet *as) {
-    int i;
-    printf("\n[ %s ]\n", as->name);
-    printf("Local:\n");
-    for (i=0 ; i<as->localcount ; i++) {
-        if (as->local[i] == NULL) {
-            printf("  - no requirements\n");
-        } else {
-            if (i % 2 == 1) {
-                printf("  - %s\n", as->local[i]);
-            } else {
-                printf("- %s\n", as->local[i]);
-            }
-        }
-    }
-    printf("Remote:\n");
-    for (i=0 ; i<as->remotecount ; i++) {
-        if (as->remote[i] == NULL) {
-            printf("  - no requirements\n");
-        } else {
-            if (i % 2 == 1) {
-                printf("  - %s\n", as->remote[i]);
-            } else {
-                printf("- %s\n", as->remote[i]);
-            }
-        }
-    }
-}
-
 void print_rake(Rake *r) {
     int i;
 
@@ -103,42 +56,8 @@ void print_rake(Rake *r) {
     printf("setcount: %d\n", r->setcount);
     printf("\n");
     for (i=0 ; i<r->setcount ; i++) {
-        print_set(r->sets[i]);
+        print_set(r->sets[i], 0);
     }
-}
-
-void new_command(ActionSet *as, char *command, char *requires) {
-//  SETUP CMD AND REQ STRINGS
-    int remote = 0; // 0 = local, 1 = remote
-
-    if (!strncmp(command, "remote-", 6)) {
-    // TRUNCATE REMOTE PREFIX
-        remote = 1; // is remote
-        command = &command[7];
-    }
-    char *cmd = malloc((strlen(command) + 1) * sizeof(char));
-    snprintf(cmd, (strlen(command) + 1) * sizeof(char), "%s", command);
-
-//  STORE REQ (OR LEAVE NULL IF NONE)
-    char *req = NULL;
-    if (requires != NULL) {
-        req = malloc((strlen(requires) + 1) * sizeof(char));
-        req = strdup(requires);
-    }
-
-//  STORE COMMAND AND REQ IN APPROPRIATE ARRAY
-    if (remote == 1) {
-    //  AS REMOTE
-        as->remote = realloc(as->remote, (as->remotecount + 2) * sizeof(char*));
-        as->remote[as->remotecount++] = cmd;
-        as->remote[as->remotecount++] = req;
-    } else {
-    //  AS LOCAL
-        as->local = realloc(as->local, (as->localcount + 2) * sizeof(char*));
-        as->local[as->localcount++] = cmd;
-        as->local[as->localcount++] = req;
-    }
-    
 }
 
 Rake *rake_from_file(char *filename) {
@@ -147,10 +66,8 @@ Rake *rake_from_file(char *filename) {
 //  OPEN FILE
     FILE *rfp = fopen(filename, "r");
 
-    if (rfp == NULL) {
-        perror("Error : could not open file!");
-        exit(EXIT_FAILURE);
-    }
+    if (rfp == NULL)
+        exit(error("could not open file!", EXIT_FAILURE));
 
     Rake *rtmp = new_rake(filename);
     char buffer[BUF_SIZE]; // LINE BUFFER
@@ -214,17 +131,17 @@ Rake *rake_from_file(char *filename) {
                 if (!strncmp(current, "requires", 7)) {
 
                 //  SAVE REQUIREMENTS AND PROGRESS TWO LINES
-                    new_command(atmp, previous, current);
+                    add_cmd(atmp, previous, current);
                     previous = NULL;
                 } else {
 
                 // REQUIREMENTS ARE NULL AND PROGRESS ONE LINE
-                    new_command(atmp, previous, NULL);
+                    add_cmd(atmp, previous, NULL);
                     previous = strdup(current);
                 }
             }
             if (previous != NULL)
-                new_command(atmp, current, NULL);
+                add_cmd(atmp, current, NULL);
 
         //  ASSIGN THE ACTIONSET
             rtmp->sets = realloc(rtmp->sets, (rtmp->setcount + 1) * sizeof(atmp));

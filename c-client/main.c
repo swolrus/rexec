@@ -1,4 +1,5 @@
 #include "./c-client.h"
+#include "../common/strsplit.h"
 
 Message *response;
 
@@ -21,7 +22,7 @@ int main(int argc, char *argv[]) {
 
         switch (pid) {
             case -1:
-                error("fork() failed");
+                exit(error("fork() failed", EXIT_FAILURE));
             case 0: {
                 rake->sets[i]->socket = c_connect(rake->hosts[0]);
                 exec_local_set(rake->sets[i]);
@@ -50,26 +51,42 @@ int exec_local_set(ActionSet *as) {
     int status = 0;
 
 //  SPAWN LOCAL PARALLEL PROCESSES TO EXEC ACTIONSET
-    for (int i=0 ; i<as->localcount ; i+=2) {
+    for (int i=0 ; i<as->localcount ; i++) {
         if ((child_pid = fork()) == 0) {
-            if ((status = system(as->local[i])) != -1){
+            if ((status = system(as->local[i]->cmd)) != -1){
                 //printf("%s // EXITED (%d)\n", as->local[i], WEXITSTATUS(status));
                 exit(EXIT_SUCCESS);
             }
-            error("system() failed");
+            exit(error("system() failed", EXIT_FAILURE));
         }
     }
 
 //  CONFIRM START OF ACTIONSET
     char a[10];
-    sprintf(a, "%d", as->remotecount / 2);
+    sprintf(a, "%d", as->remotecount);
     send_data(as->socket, a, CODE_AS_START);
     response = recieve_data(as->socket);
     print_message(response);
 
 //  REMOTE - SEND EACH COMMAND AND THEN REQUIREMENTS SEQUENTIALLY
-    for (int i=0 ; i<as->remotecount ; i+=2) {
-        send_data(as->socket, as->remote[i], CODE_ACTION);
+    char *req;
+    for (int i=0 ; i<as->remotecount ; i++) {
+        send_data(as->socket, as->remote[i]->cmd, CODE_ACTION);
+        if ((req = as->remote[i]->req) != NULL) {
+            send_data(as->socket, as->remote[i]->req, CODE_REQ);
+            int count;
+            char **req;
+            req = strsplit(&as->remote[i]->req[8], &count);
+            printf("%d", count);
+            for (int i=0 ; i<count ; i++) {
+                if (send_file(as->socket, req[i]) < 0)
+                    exit(error("send_file() failed", EXIT_FAILURE));
+            }
+            response = recieve_data(as->socket);
+            print_message(response);
+        } else {
+            send_data(as->socket, "none", CODE_REQ);
+        }
     }
 
     send_data(as->socket, "", CODE_AS_END);

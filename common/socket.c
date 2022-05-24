@@ -21,6 +21,11 @@ void print_message(Message *m) {
         printf("(%d, %d)%s\n", m->header.type, m->header.length, m->data);
 }
 
+void free_message(Message *m) {
+    free(m->data);
+    free(m);
+}
+
 int c_connect(Host *h) {
 
     if (h->socket != -1) {
@@ -34,16 +39,16 @@ int c_connect(Host *h) {
     serv_addr.sin_port = htons(h->port);
 
     if((h->socket = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-        error("socket() failed");
+        exit(error("socket() failed", EXIT_FAILURE));
 
     if (setsockopt(h->socket, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) < 0)
-        error("setsockopt(SO_REUSEADDR) failed");
+        exit(error("setsockopt(SO_REUSEADDR) failed", EXIT_FAILURE));
 
     if(inet_pton(AF_INET, h->hostname, &serv_addr.sin_addr)<=0)
-        error("Error : Invalid address");
+        exit(error("invalid address", EXIT_FAILURE));
 
     if (connect(h->socket, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
-        error("connect() failed");
+        exit(error("connect() failed", EXIT_FAILURE));
 
     printf("New socket connected!\n");
 
@@ -54,10 +59,10 @@ int h_connect(Host *h) {
     struct sockaddr_in serv_addr;
 
     if((h->socket = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-        error("socket() failed");
+        exit(error("socket() failed", EXIT_FAILURE));
 
     if (setsockopt(h->socket, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) < 0)
-        error("setsockopt(SO_REUSEADDR) failed");
+        exit(error("setsockopt(SO_REUSEADDR) failed", EXIT_FAILURE));
 
     memset(&serv_addr, '\0', sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
@@ -65,7 +70,7 @@ int h_connect(Host *h) {
     serv_addr.sin_port = htons(h->port);
 
     if (bind(h->socket, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
-        error("bind() failed");
+        exit(error("bind() failed", EXIT_FAILURE));
 
     return h->socket;
 
@@ -73,19 +78,19 @@ int h_connect(Host *h) {
 
 Message *recieve_data(int socket) {
     Message *msg = malloc(sizeof(Message));
-    char buffer[BUF_SIZE];
+    char buffer[BUF_SIZE] = {0};
 
 //  RECIEVE THE HEADER
     memset(&msg->header, 0, sizeof(HEADER));
     if (recv(socket, &msg->header, sizeof(HEADER), 0) < 0) // recieve length
-        error("read() failed");
+        exit(error("recv() failed", EXIT_FAILURE));
 
 //  IF DATA RECIEVE THE DATA
     if (msg->header.length != 0) {
         memset(buffer, 0, sizeof(buffer));
 
-        if( recv(socket, &buffer, msg->header.length, 0) < 0) // recieve data
-            error("read() failed");
+        if(recv(socket, &buffer, msg->header.length, 0) < 0) // recieve data
+            exit(error("recv() failed", EXIT_FAILURE));
     }
     msg->data = malloc((strlen(buffer) + 1) * sizeof(char));
     msg->data = strdup(buffer);
@@ -101,11 +106,57 @@ void send_data(int socket, char *data, int mtype) {
 
 //  SEND THE HEADER
     if (send(socket, &msg->header, sizeof(HEADER), 0) < 0) // send length
-        error("write() failed");
+        exit(error("send() failed", EXIT_FAILURE));
 
 //  IF DATA SEND BYTES
     if (msg->header.length != 0) {
         if (send(socket, data, strlen(data), 0) < 0) // send data
-            error("write() failed");
+            exit(error("send() failed", EXIT_FAILURE));
     }
+}
+
+int recieve_file(int socket, char *filepath) {
+    FILE *fp;
+    Message *msg;
+
+    fp = fopen(filepath, "wt");
+    if (fp == NULL)
+        return error("invalid filepath", -1);
+
+    while (1)
+    {
+        msg = recieve_data(socket);
+
+        if (msg->header.type == CODE_FILE) {
+            fprintf(fp, "%s", msg->data);
+            printf("%s", msg->data);
+        } else if (msg->header.type == CODE_FILE_END) {
+            send_data(socket, "file transfer was successful", CODE_OK);
+            break;
+        } else {
+            fclose(fp);
+            send_data(socket, "file transfer failed", CODE_FAIL);
+            return error("file transfer failed", -1); 
+        }
+    }
+    fclose(fp);
+    return 0;
+}
+
+int send_file(int socket, char *filepath) {
+    FILE *fp;
+
+    char buffer[BUF_SIZE] = {0};
+
+    fp = fopen(filepath, "r");
+    if (fp == NULL)
+        return error("could not open file", -1);
+
+    while(fgets(buffer, BUF_SIZE, fp)!=NULL)
+        send_data(socket, buffer, CODE_FILE);
+
+    send_data(socket, filepath, CODE_FILE_END);
+    fclose(fp);
+
+    return 0;
 }

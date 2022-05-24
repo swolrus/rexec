@@ -1,5 +1,6 @@
 #include <sys/wait.h>
 #include "./c-server.h"
+#include "../common/strsplit.h"
 
 
 int main(int argc, char *argv[])
@@ -8,7 +9,7 @@ int main(int argc, char *argv[])
     socklen_t clilen = sizeof(cli_addr);
 
     if (argc < 2)
-        error("no port provided");
+        exit(error("no port provided", EXIT_FAILURE));
 
     Host server = { .socket = -1, .hostname = NULL, .port = 6044 };
 
@@ -19,60 +20,60 @@ int main(int argc, char *argv[])
 
     int client;
     while (1) {
-        sleep(0.25);
         if ((client = accept(server.socket, (struct sockaddr *) &cli_addr, &clilen)) < 0)
-            error("accept failed");
+            exit(error("accept failed", EXIT_FAILURE));
         if (pthread_create(&t_id, NULL, client_handler, (void*)&client) < 0)
-            error("pthread_create() failed");
+            exit(error("pthread_create() failed", EXIT_FAILURE));
     }
     close(server.socket);
 
     return 0;
 }
 
-int exec_set(char **commands, int count) {
-    pid_t cpid, wpid;
-    int wstatus;
+int exec_set(ActionSet *as) {
+    ExecPipes pipes[as->localcount];
 
-    for (int i=0; i<count; i++) {
-        if ((cpid = fork()) == 0) {
-            char std[BUF_SIZE];
-            char err[BUF_SIZE];
-            
-            ExecPipes pipes = exec_cmd(commands[i]);
-
-            while (fgets(std, BUF_SIZE, pipes.out)) {
-                printf("OUT : %s", std);
-            }
-
-            while (fgets(err, BUF_SIZE, pipes.err)) {
-                printf("ERR : %s", err);
-                exit(EXIT_FAILURE);
-            }
-            fclose(pipes.in);
-            exit(EXIT_SUCCESS);
-        }
+    for (int i=0 ; i<as->localcount ; i++) {
+        pipes[i] = exec_cmd(as->local[i]->cmd, "/");
     }
-//  WAIT FOR ALL COMMANDS TO EXIT
-    while ((wpid = wait(&wstatus)) > 0) {
-        if (wstatus != EXIT_SUCCESS) {
-            return wstatus;
+    pid_t wpid;
+    char buf[BUF_SIZE];
+    do {
+        wpid = wait(NULL);
+        for (int i=0 ; pipes[i].pid != wpid && i<as->localcount ; i++) {
+            buf[0] = '\0';
+            fgets(buf, BUF_SIZE, pipes[i].err);
+            if (strlen(buf) > 1) {
+                buf[strcspn(buf, "\n")] = '\0';
+                as->local[i]->err = strdup(buf);
+                as->local[i]->status = 1;
+                return i;
+            } else {
+                buf[0] = '\0';
+                fgets(buf, BUF_SIZE, pipes[i].out);
+                buf[strcspn(buf, "\n")] = '\0';
+                as->local[i]->out = strdup(buf);
+                as->local[i]->status = 0;
+            }
         }
-    }
+    } while (wpid > 0);
+    
     return 0;
 }
 
 void* client_handler(void* c) {
     pthread_detach(pthread_self());
 
+
     puts("A client has been connected");
 
     int client = *((int*)c);
     Message *msg;
 
-    char **commands;
-    commands = malloc(sizeof(char *));
-    int count = 0, total = 0, connected = 1;
+    ActionSet *as = malloc(sizeof(char *));
+    as = new_set("ACTIONS");
+
+    int connected = 1;
     while (connected) {
 
         msg = recieve_data(client);
@@ -89,28 +90,48 @@ void* client_handler(void* c) {
 
         //  CLIENT REQUESTING TO SEND AND HAVE EXECUTED AN ACTIONSET
             case CODE_AS_START: {
-                total = atoi(msg->data); // includes the count of actions in data
-                count = 0;
+                as->remotecount = atoi(msg->data); // includes the count of actions in data
                 send_data(client, "AWAITING COMMAND SET", CODE_OK);
                 break;
             }
 
         //  RECIEVE SINGLE COMMAND
             case CODE_ACTION: {
-                commands = realloc(commands, (count + 1) * sizeof(char *));
-                commands[count++] = strdup(msg->data);
-                printf("%d|%d\n", count, total);
+                char *cmd = strdup(msg->data);
+                msg = recieve_data(client);
+            //  RECIEVE REQ COMMAND
+                if (msg->header.type == CODE_REQ) {
+                    add_cmd(as, cmd, msg->data);
+                    if (strcmp(msg->data, "none") != 0) {
+                        int count, recieved = 0;
+                        char **req;
+                        req = strsplit(&msg->data[8], &count);
+                        //int recieved[count] = { 0 };
+                        for (int i=0 ; i<count ; i++) {
+                            printf("recieving file \"%s\"\n", req[i]);
+                            if (recieve_file(client, req[i]) >= 0)
+                                recieved++;
+                            else
+                                send_data(client, "RECIEVE FAILED", CODE_FAIL);
+                        }
+                    }
+                    printf("[%d|%d] CMD: %s REQ: %s\n", as->remotecount, as->localcount, cmd, msg->data);
+                } else {
+                    send_data(client, "REQ NOT SUPPLIED FOR AS", CODE_FAIL);
+                    connected = 0;
+                    break;
+                }
                 break;
             }
         //  CLIENT SIGNALLING ALL ACTIONSET COMMANDS HAVE BEEN SENT
             case CODE_AS_END: {
             //  ENSURE WE HAVE RECIEVED ALL ACTION SETS
-                if (total == count) {
+                if (as->remotecount == as->localcount) {
                     send_data(client, "RECIEVED, EXECUTING", CODE_OK);
-
-                    if (exec_set(commands, total) > 0) {
+                    int failed;
+                    if ((failed = exec_set(as)) > 0) {
                         puts("actionset finished executing unsuccessfully");
-                        send_data(client, "EXEC FAILED", CODE_FAIL);
+                        send_data(client, as->local[failed]->err, CODE_ACTION_STATUS + failed);
                     } else {
                         puts("actionset finished executing successfully");
                         send_data(client, "EXEC COMPLETE", CODE_OK);
