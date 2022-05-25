@@ -106,6 +106,14 @@ void send_new_files(char *path, char **rec, int rk, int client) {
 }
 
 
+int get_cost() {
+    srand(time(NULL));
+    int ran;
+    ran = rand() % 10;
+    return ran;
+}
+
+
 void* client_handler(void* c) {
     pthread_detach(pthread_self());
 
@@ -134,10 +142,17 @@ void* client_handler(void* c) {
 
     //  RESPONS DEPENDANT ON MESSAGE
         switch (msg->header.type) {
+            case CODE_EXIT: {
+                printf("Client Disconnect Request\n");
+                connected = false;
+                break;
+            }
 
         //  CLIENT WANTS CURRENT SERVER COST
             case CODE_COST: {
-                send_data(client, "", CODE_COST);
+                char a[10];
+                sprintf(a, "%d", get_cost());
+                send_data(client, a, CODE_COST);
                 puts("sending cost");
                 break;
             }
@@ -163,7 +178,7 @@ void* client_handler(void* c) {
                     send_data(client, "NEED REQ", CODE_OK);
                     if ((recieve_file(client, pathbuff) < 0)) {
                         send_data(client, "FILE RECIEVE FAILED", CODE_FAIL);
-                        connected = 0;
+                        connected = false;
                         break;
                     } else {
                         rec[rk++] = strdup(msg->data);
@@ -202,7 +217,7 @@ void* client_handler(void* c) {
     }
     memset(&pathbuff, 0, BUF_SIZE);
     snprintf(pathbuff, BUF_SIZE, "rm -r -d %s", tpath);
-    //exec_cmd(pathbuff, "./");
+    exec_cmd(pathbuff, "./");
 
     puts("Client Disconnected");
     close(client);

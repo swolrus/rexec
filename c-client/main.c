@@ -25,9 +25,24 @@ int main(int argc, char *argv[]) {
     printf("\nSTARTING EXECUTION\n");
 
     for (int i=0; i<rake->setcount; i++) {
-    //  execute the action set
-        rake->sets[i]->socket = c_connect(rake->hosts[0]);
-        negotiate_set(rake->sets[i], dirpath);
+        int wstatus;
+        int pid;
+
+        pid = fork();
+
+        switch (pid) {
+            case -1:
+                exit(error("fork() failed", EXIT_FAILURE));
+            case 0: {
+                rake->sets[i]->socket = c_connect(rake->hosts[0]);
+                negotiate_set(rake->sets[i], dirpath);
+                exit(EXIT_SUCCESS);
+            }
+            default:
+            //  each actionset can only execute once previous is complete
+                wait(&wstatus);
+                break;
+        }
     }
 
     return 0;
@@ -40,14 +55,18 @@ int main(int argc, char *argv[]) {
  * @return 0 if exec is success -1 if failed
  */
 int negotiate_set(ActionSet *as, char *dirpath) {
+    char buffer[BUF_SIZE];
+    char itoa[10];
+
+    pid_t child_pid;
+    int status = 0;
+
 //  GET COST
     send_data(as->socket, "", CODE_COST);
     response = recieve_data(as->socket);
     print_message(response);
 
 //  LOCAL COMMANDS
-    pid_t child_pid;
-    int status = 0;
 
 //  SPAWN LOCAL PARALLEL PROCESSES TO EXEC ACTIONSET
     for (int i=0 ; i<as->localcount ; i++) {
@@ -61,9 +80,8 @@ int negotiate_set(ActionSet *as, char *dirpath) {
     }
 
 //  CONFIRM START OF ACTIONSET
-    char a[10];
-    sprintf(a, "%d", as->remotecount);
-    send_data(as->socket, a, CODE_AS_START);
+    snprintf(itoa, sizeof(itoa), "%d", as->remotecount);
+    send_data(as->socket, itoa, CODE_AS_START);
 
     response = recieve_data(as->socket);
     print_message(response);
@@ -75,7 +93,6 @@ int negotiate_set(ActionSet *as, char *dirpath) {
             char **wreq = NULL;
             wreq = strsplit(&as->remote[i]->req[8], &count);
 
-            char buffer[BUF_SIZE];
             for (int i=0 ; i<count ; i++) {
                 send_data(as->socket, wreq[i], CODE_REQ);
 
@@ -102,10 +119,13 @@ int negotiate_set(ActionSet *as, char *dirpath) {
     response = recieve_data(as->socket);
     print_message(response);
 
+
     while (1) {
         if (response->header.type == CODE_OUT) {
             send_data(as->socket, "", CODE_OK);
-            if ((recieve_bfile(as->socket, response->data) < 0)) {
+            memset(buffer, 0, sizeof(buffer));
+            snprintf(buffer, BUF_SIZE, "%s/%s", dirpath, response->data);
+            if ((recieve_bfile(as->socket, buffer) < 0)) {
                 send_data(as->socket, "FILE RECIEVE FAILED", CODE_FAIL);
                 return -1;
             }

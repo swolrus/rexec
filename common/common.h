@@ -27,20 +27,21 @@ pid_t vfork(void);
 
 // Enums
 typedef enum {
-    CODE_FAIL = 99,
-    CODE_BAD = 100,
-    CODE_OK = 200,
-    CODE_OUT = 300,
-    CODE_OUT_END = 301,
-    CODE_ACTION_STATUS = 1000,
-    CODE_COST = 500,
-    CODE_AS_START = 900,
-    CODE_ACTION = 901,
-    CODE_REQ = 902,
-    CODE_AS_EXECUTE = 904,
-    CODE_FILE = 800,
-    CODE_FILE_END = 801,
-    CODE_FILE_SZ = 803,
+    CODE_EXIT = 0,
+    CODE_FAIL = 99, // a request caused server exec to fail, close con
+    CODE_BAD = 100, // nack
+    CODE_OK = 200, // ack
+    CODE_OUT_SZ = 300, // byte size of an output file about to be sent
+    CODE_OUT = 301, // an output file chunk
+    CODE_OUT_END = 302, // end of output file chunks
+    CODE_ACTION_STATUS = 1000, // includes code>1000, will be STATUS + i where i is index of a command
+    CODE_COST = 500, // client request cost
+    CODE_AS_START = 900, // client has chosen host and wants to send actions/req
+    CODE_ACTION = 901, // a action (command)
+    CODE_REQ = 902, // a requirement (file) is wanting to be sent
+    CODE_AS_EXECUTE = 904, // server safe to exec (all req/cmd have been sent)
+    CODE_FILE = 800, // a character file line
+    CODE_FILE_END = 801, // all character file lines have been sent
 } CODES;
 
 // STRUCTS

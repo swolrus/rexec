@@ -236,8 +236,7 @@ int send_file(int socket, char *filepath) {
  */
 int recieve_bfile(int socket, char *filepath) {
     FILE *fp;
-
-    char buf[BUF_SIZE] = {0};
+    uint32_t sz;
 
     fp = fopen(filepath, "wb+");
     if (fp == NULL)
@@ -250,31 +249,30 @@ int recieve_bfile(int socket, char *filepath) {
     if (recv(socket, &header, sizeof(HEADER), 0) < 0) // recieve length
         exit(error("recv() failed", EXIT_FAILURE));
 
-    if (header.type == CODE_FILE) {
-        uint32_t total = 0;
-        if(recv(socket, &total, header.length, 0) < 0) // the files length into variable total
-            exit(error("recv() failed", EXIT_FAILURE));
-
-        // up to here works, total will contain the n bytes sum
-        
-        /**
-         * TODO: find some method to properly track how many bytes have been written
-         *         below solution is hacky and currently broken
-         */
-        
-        printf("TOTOAL: %d\n", total);
-        // write in binary
-        int length = 0;
-        while ((length = recv(socket, buf, BUF_SIZE, 0)) && total > 0) {
-            fwrite(buf, sizeof (char), length, fp);
-            if (strlen(buf) > 0) {
-                printf("received: %d\n", (int)strlen(buf));
-                total -= length; // this may be the culprit infinitely subtracting
-                memset(&buf, 0, sizeof (buf));
-            }
-        }
-        printf("File '%s' received.\n", filepath);
+    if (header.type == CODE_OUT_SZ) {
+        sz = header.length;
+    } else {
+        exit(error("file size not sent", EXIT_FAILURE));
     }
+
+    printf("wanting %d bytes\n", sz);
+
+    // write in binary
+    char file_data[BUF_SIZE / 4] = {0};
+    
+    int nbytes = 0;
+    int total;
+    while (total < sz) {
+        nbytes = recv(socket, &file_data, sz, 0);
+        if (nbytes > 0) {
+            fwrite(file_data, sizeof (char), nbytes, fp);
+            total += nbytes;
+            printf("received: %d/%d\n", total, sz);
+            memset(&file_data, 0, sizeof(file_data));
+        }
+    }
+
+    printf("File '%s' received.\n", filepath);
     fclose(fp);
     return 0;
 }
@@ -289,7 +287,7 @@ int send_bfile(int socket, char *filepath) {
     printf("Sending %s\n", filepath);
     FILE *fp;
     
-    char buf[BUF_SIZE] = {0};
+    char file_data[BUF_SIZE / 4] = {0};
 
     fp = fopen(filepath, "rb+");
 
@@ -301,26 +299,25 @@ int send_bfile(int socket, char *filepath) {
     
     HEADER header = {0};
 
-    header.type = CODE_FILE;
-    header.length = sizeof(uint32_t);
+//  SEND THE FILE LENGTH
+    header.type = CODE_OUT_SZ;
+    header.length = sz;
     if (send(socket, &header, sizeof(HEADER), 0) < 0) // send length
-        exit(error("send() failed", EXIT_FAILURE));
-
-    if (send(socket, &sz, sizeof(sz), 0) < 0) // send data
         exit(error("send() failed", EXIT_FAILURE));
 
     // again up to here works
 
-    int length = 0, total = 0;
-    while ((length = fread(buf, sizeof (char), BUF_SIZE, fp)) > 0) {
-        /**
-         * TODO: find some method to track
-         */
-        printf("Length : '%d'\n", length);
-        send(socket, buf, length, 0);
-        memset(&buf, 0, BUF_SIZE);
-        total += length;
+    int sent = 0;
+    uint32_t nbytes = 0;
+    while (sent < sz)
+    {
+        nbytes = fread(file_data, sizeof(char), sizeof(file_data), fp);
+        sent += send(socket, file_data, nbytes, 0);
+        printf("sent : '%d'\n", sent);
+        memset(&file_data, 0, sizeof(file_data));
     }
+    // send_data(socket, "", CODE_OUT_END);
+
     printf("File '%s' transfered!\n", filepath);
     fclose(fp);
 
