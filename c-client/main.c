@@ -115,12 +115,10 @@ int negotiate_set(ActionSet *as, char *dirpath) {
     response = recieve_data(as->socket);
     print_message(response);
 
-//  WAIT FOR REMOTE COMMANDS TO ALSO EXIT
-    response = recieve_data(as->socket);
-    print_message(response);
-
 
     while (1) {
+        response = recieve_data(as->socket);
+        print_message(response);
         if (response->header.type == CODE_OUT) {
             send_data(as->socket, "", CODE_OK);
             memset(buffer, 0, sizeof(buffer));
@@ -132,10 +130,9 @@ int negotiate_set(ActionSet *as, char *dirpath) {
         } else if (response->header.type == CODE_OUT_END) {
             printf("\nRECIEVED RESULTS SUCCESSFULLY!\n");
             return 0;
-        } else {
-            return error("file transfer failed", -1); 
         }
     }
+    
 
     return 0;
 }

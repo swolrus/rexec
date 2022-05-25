@@ -1,5 +1,6 @@
 #include <sys/wait.h>
 #include <dirent.h>
+#include <time.h>
 #include "./c-server.h"
 #include "../common/strsplit.h"
 
@@ -117,7 +118,6 @@ int get_cost() {
 void* client_handler(void* c) {
     pthread_detach(pthread_self());
 
-
     puts("A client has been connected");
 
     int client = *((int*)c);
@@ -203,7 +203,10 @@ void* client_handler(void* c) {
                     } else {
                         puts("actionset finished executing successfully");
 
+
                         send_new_files(tpath, rec, rk, client);
+
+                        send_data(client, "SENT OUT", CODE_OUT_END);
                     }
             //  OTHERWISE ALERT CLIENT
                 } else {

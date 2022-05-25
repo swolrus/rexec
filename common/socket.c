@@ -260,19 +260,20 @@ int recieve_bfile(int socket, char *filepath) {
     // write in binary
     char file_data[BUF_SIZE / 4] = {0};
     
-    int nbytes = 0;
-    int total;
+    uint32_t nbytes = 0;
+    uint32_t total = 0;
     while (total < sz) {
-        nbytes = recv(socket, &file_data, sz, 0);
+        nbytes = recv(socket, &file_data, sizeof(file_data), 0);
         if (nbytes > 0) {
             fwrite(file_data, sizeof (char), nbytes, fp);
             total += nbytes;
-            printf("received: %d/%d\n", total, sz);
-            memset(&file_data, 0, sizeof(file_data));
+            printf("received: %d - %d/%d\n", nbytes, total, sz);
         }
+        memset(&file_data, 0, sizeof(file_data));
     }
 
     printf("File '%s' received.\n", filepath);
+
     fclose(fp);
     return 0;
 }
@@ -289,13 +290,14 @@ int send_bfile(int socket, char *filepath) {
     
     char file_data[BUF_SIZE / 4] = {0};
 
-    fp = fopen(filepath, "rb+");
+    fp = fopen(filepath, "rb");
 
     if (fp == NULL)
         return error("could not open file", -1);
 
-    fseek(fp, 0L, SEEK_END);
+    fseek(fp, 0, SEEK_END);
     uint32_t sz = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
     
     HEADER header = {0};
 
@@ -307,16 +309,17 @@ int send_bfile(int socket, char *filepath) {
 
     // again up to here works
 
-    int sent = 0;
-    uint32_t nbytes = 0;
-    while (sent < sz)
+    uint32_t sent = 0;
+    uint32_t nbytes;
+    while ( (fread(&file_data, sizeof(char), sizeof(file_data), fp)) )
     {
-        nbytes = fread(file_data, sizeof(char), sizeof(file_data), fp);
-        sent += send(socket, file_data, nbytes, 0);
+        if ((nbytes = send(socket, &file_data, sizeof(file_data), 0)) < 0) // send length
+            exit(error("send() failed", EXIT_FAILURE));
+        sent += nbytes;
         printf("sent : '%d'\n", sent);
         memset(&file_data, 0, sizeof(file_data));
     }
-    // send_data(socket, "", CODE_OUT_END);
+    send_data(socket, "", CODE_OK);
 
     printf("File '%s' transfered!\n", filepath);
     fclose(fp);
