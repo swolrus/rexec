@@ -6,16 +6,16 @@ Message *response;
 int main(int argc, char *argv[]) {
 
     if (argc < 2) {
-        fprintf(stderr, "Usage : %s rakefilepath [rakefilepath2 ...]\n", argv[0]);
+        fprintf(stderr, "Usage : %s rakefilePath [rakefilePath2 ...]\n", argv[0]);
         //exit(EXIT_FAILURE);
     }
     char *fullpath = argv[1];
-    char *dirpath = strdup(argv[1]);
+    char *dirPath = strdup(argv[1]);
     char *name = NULL;
-    printf(dirpath);
+    printf(dirPath);
 
-    if ((name = strrchr(dirpath, '/')) == NULL) {
-        if ((name = strrchr(dirpath, '\\')) == NULL)
+    if ((name = strrchr(dirPath, '/')) == NULL) {
+        if ((name = strrchr(dirPath, '\\')) == NULL)
             name = fullpath;
     } else if (name != NULL) { // if still null (not a path)
         *name++ = '\0';
@@ -36,7 +36,7 @@ int main(int argc, char *argv[]) {
                 exit(error("fork() failed", EXIT_FAILURE));
             case 0: {
                 rake->sets[i]->socket = c_connect(rake->hosts[0]);
-                negotiate_set(rake->sets[i], dirpath);
+                negotiate_set(rake->sets[i], dirPath);
                 exit(EXIT_SUCCESS);
             }
             default:
@@ -52,11 +52,11 @@ int main(int argc, char *argv[]) {
 
 /**
  * @param as set to be executed
- * @param dirpath the directory to execute the command within
+ * @param dirPath the directory to execute the command within
  * @return 0 if exec is success -1 if failed
  */
-int negotiate_set(ActionSet *as, char *dirpath) {
-    char pathbuf[BUF_SIZE];
+int negotiate_set(ActionSet *as, char *dirPath) {
+    char pathBuf[BUF_SIZE];
 
     pid_t child_pid;
     int status = 0;
@@ -80,7 +80,7 @@ int negotiate_set(ActionSet *as, char *dirpath) {
     }
 
 //  CONFIRM START OF ACTIONSET
-    uint32_t sz = (uint32_t) as->remotecount;
+    uint32_t sz = (uint32_t) as->remoteCount;
     response->header.type = CODE_AS_START;
     response->header.length = sizeof(uint32_t);
     if (send(as->socket, &response->header, sizeof(HEADER), 0) < 0) // send length
@@ -91,7 +91,7 @@ int negotiate_set(ActionSet *as, char *dirpath) {
     response = recieve_data(as->socket);
     print_message(response);
 
-    for (int i=0 ; i<as->remotecount ; i++) {
+    for (int i=0 ; i<as->remoteCount ; i++) {
         send_data(as->socket, as->remote[i]->cmd, CODE_ACTION);
         if ((as->remote[i]->req) != NULL) {
             int count;
@@ -105,15 +105,15 @@ int negotiate_set(ActionSet *as, char *dirpath) {
                 print_message(response);
 
                 if (response->header.type == CODE_OK) {
-                    memset(pathbuf, 0, sizeof(pathbuf));
-                    snprintf(pathbuf, BUF_SIZE, "%s/%s", dirpath, wreq[i]);
-                    printf("%s\n", pathbuf);
+                    memset(pathBuf, 0, sizeof(pathBuf));
+                    snprintf(pathBuf, BUF_SIZE, "%s/%s", dirPath, wreq[i]);
+                    printf("%s\n", pathBuf);
                     if ((strcmp(&wreq[i][strlen(wreq[i]) - 2], ".o")) == 0) {
-                        if (send_bfile(as->socket, pathbuf) < 0) // we then want to send it back as it's an obj file
+                        if (send_bfile(as->socket, pathBuf) < 0) // we then want to send it back as it's an obj file
                             exit(error("send_file() failed", EXIT_FAILURE));
                     } else {
                         printf("Sending normal file");
-                        if (send_file(as->socket, pathbuf) < 0)
+                        if (send_file(as->socket, pathBuf) < 0)
                             exit(error("send_file() failed", EXIT_FAILURE));
                     }
                 }
@@ -132,9 +132,9 @@ int negotiate_set(ActionSet *as, char *dirpath) {
         print_message(response);
         if (response->header.type == CODE_OUT) {
             send_data(as->socket, "", CODE_OK);
-            memset(pathbuf, 0, sizeof(pathbuf));
-            snprintf(pathbuf, BUF_SIZE, "%s/%s", dirpath, response->data);
-            if ((recieve_bfile(as->socket, pathbuf) < 0)) {
+            memset(pathBuf, 0, sizeof(pathBuf));
+            snprintf(pathBuf, BUF_SIZE, "%s/%s", dirPath, response->data);
+            if ((recieve_bfile(as->socket, pathBuf) < 0)) {
                 send_data(as->socket, "FILE RECIEVE FAILED", CODE_FAIL);
                 send_data(as->socket, "", CODE_EXIT);
                 return -1;

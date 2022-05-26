@@ -15,9 +15,9 @@ int error(char *msg, int e) {
 /**
  * Helper to close pipes
  */
-void cleanup(int pipe_pair[2]) {
-    close(pipe_pair[0]);
-    close(pipe_pair[1]);
+void cleanup(int pipePair[2]) {
+    close(pipePair[0]);
+    close(pipePair[1]);
 }
 
 /**
@@ -32,10 +32,10 @@ char *new_tmpd() {
             exit(error("could not create /tmp", EXIT_FAILURE));
     }
 //  CREATE DIR TO STORE FILES IN AND RETURN
-    char *tpath = strdup(TMPDIR_FORMAT);
-    if ((mkdtemp(tpath)) == NULL)
+    char *tPath = strdup(TMPDIR_FORMAT);
+    if ((mkdtemp(tPath)) == NULL)
         exit(error("could not generate tmp directory", EXIT_FAILURE));
-    return tpath;
+    return tPath;
 }
 
 /**
@@ -48,7 +48,7 @@ ActionSet *new_set(char *name) {
     atmp = malloc(sizeof(ActionSet));
     atmp->name = strdup(name);
     atmp->localCount = 0;
-    atmp->remotecount = 0;
+    atmp->remoteCount = 0;
     atmp->local = malloc(1 * sizeof(Command *));
     atmp->remote = malloc(1 * sizeof(Command *));
     return atmp;
@@ -81,7 +81,7 @@ void print_set(ActionSet *as, bool remote) {
     }
     if (!remote) {
         printf("Remote:\n");
-        for (i=0 ; i<as->remotecount ; i++) {
+        for (i=0 ; i<as->remoteCount ; i++) {
             print_cmd(as->remote[i], 0);
         }
     }
@@ -122,8 +122,8 @@ void add_cmd(ActionSet *as, char *command, char *requires) {
 //  STORE COMMAND AND REQ IN APPROPRIATE ARRAY
     if (remote == 1) {
     //  AS REMOTE
-        as->remote = realloc(as->remote, (as->remotecount + 2) * sizeof(Command *));
-        as->remote[as->remotecount++] = cmd;
+        as->remote = realloc(as->remote, (as->remoteCount + 2) * sizeof(Command *));
+        as->remote[as->remoteCount++] = cmd;
     } else {
     //  AS LOCAL
         as->local = realloc(as->local, (as->localCount + 2) * sizeof(Command *));
@@ -163,25 +163,25 @@ void print_cmd(Command *cmd, bool req) {
  * @param  path    the path to execute the command at (relative)
  * @return         a struct containing the pipes
  */
-ExecPipes exec_cmd(char *command, char *path) {
-    printf("EXEC complete %s @ %s\n", command, path);
+ExecPipes exec_cmd(char *cmd, char *path) {
+    printf("EXEC complete %s @ %s\n", cmd, path);
     ExecPipes result = {.out = NULL, .err = NULL, .in=NULL};
     //int wstatus;
 
-    int stdout_pair[2];
-    // int stdin_pair[2];
-    int stderr_pair[2];
+    int stdoutPair[2];
+    // int stdinPair[2];
+    int stderrPair[2];
 
-    if (pipe(stdout_pair) < 0) {
+    if (pipe(stdoutPair) < 0) {
         return result;
     }
-    if (pipe(stderr_pair) < 0) {
-        cleanup(stdout_pair);
+    if (pipe(stderrPair) < 0) {
+        cleanup(stdoutPair);
         return result;
     }
-    // if (pipe(stdin_pair) < 0) {
-    //     cleanup(stdout_pair);
-    //     cleanup(stderr_pair);
+    // if (pipe(stdinPair) < 0) {
+    //     cleanup(stdoutPair);
+    //     cleanup(stderrPair);
     //     return result;
     // }
 
@@ -190,9 +190,9 @@ ExecPipes exec_cmd(char *command, char *path) {
     switch (result.pid) {
     //  FAIL CASE
         case -1: {
-            cleanup(stdout_pair);
-            cleanup(stderr_pair);
-            //cleanup(stdin_pair);
+            cleanup(stdoutPair);
+            cleanup(stderrPair);
+            //cleanup(stdinPair);
 
             exit(error("fork() failed", EXIT_FAILURE));
             break;
@@ -200,17 +200,17 @@ ExecPipes exec_cmd(char *command, char *path) {
 
     //  CHILD
         case 0: {
-            dup2(stdout_pair[1], STDOUT_FILENO);
-            cleanup(stdout_pair);
+            dup2(stdoutPair[1], STDOUT_FILENO);
+            cleanup(stdoutPair);
 
-            dup2(stderr_pair[1], STDERR_FILENO);
-            cleanup(stderr_pair);
+            dup2(stderrPair[1], STDERR_FILENO);
+            cleanup(stderrPair);
 
-            // dup2(stdin_pair[0], STDIN_FILENO);
-            // cleanup(stdin_pair);
+            // dup2(stdinPair[0], STDIN_FILENO);
+            // cleanup(stdinPair);
 
             char buffer[BUF_SIZE];
-            snprintf(buffer, BUF_SIZE, "cd %s; %s", path, command);
+            snprintf(buffer, BUF_SIZE, "cd %s; %s", path, cmd);
 
             execl("/bin/sh", "sh", "-c", buffer, NULL);
 
@@ -221,14 +221,14 @@ ExecPipes exec_cmd(char *command, char *path) {
     //  PARENT
         default: {
 
-            result.out = fdopen(stdout_pair[0], "r");
-            close(stdout_pair[1]);
+            result.out = fdopen(stdoutPair[0], "r");
+            close(stdoutPair[1]);
 
-            result.err = fdopen(stderr_pair[0], "r");
-            close(stderr_pair[1]);
+            result.err = fdopen(stderrPair[0], "r");
+            close(stderrPair[1]);
 
-            // in = fdopen(stdin_pair[1], "w");
-            // close(stdin_pair[0]);
+            // in = fdopen(stdinPair[1], "w");
+            // close(stdinPair[0]);
             // fclose(in);
 
             return result;

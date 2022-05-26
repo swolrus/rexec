@@ -49,10 +49,10 @@ typedef enum {
 // RAKEFILE STRUCTS
 
 typedef struct Rake { // container for a rakefile
-    char *filename;
+    char *fileName;
     int port;
     struct Host **hosts;
-    int hostcount;
+    int hostCount;
     struct ActionSet **sets;
     int setCount;
 } Rake;
@@ -63,7 +63,7 @@ typedef struct ActionSet {
     struct Command **local; // local commands
     int localCount;
     struct Command **remote; // remote commands
-    int remotecount;
+    int remoteCount;
 }ActionSet;
 
 typedef struct Command { // holds all information related to one command
@@ -81,7 +81,7 @@ typedef struct ExecPipes { // used to pass std and err pipes for execl
 
 typedef struct Host {
     int socket; // id if socket is connected else -1
-    char *hostname;
+    char *hostName;
     int port;
 } Host;
 

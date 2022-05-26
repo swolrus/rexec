@@ -14,7 +14,7 @@ int main(int argc, char *argv[])
         exit(error("no port provided", EXIT_FAILURE));
 
     srand(time(NULL));
-    Host server = { .socket = -1, .hostname = argv[1], .port = atoi(argv[2]) };
+    Host server = { .socket = -1, .hostName = argv[1], .port = atoi(argv[2]) };
 
     h_connect(&server); // populates our struct
     listen(server.socket, 5);
@@ -29,10 +29,10 @@ int main(int argc, char *argv[])
             exit(error("pthread_create() failed", EXIT_FAILURE));
     }
     close(server.socket);
-    char pathbuf[BUF_SIZE];
-    memset(&pathbuf, 0, BUF_SIZE);
-    snprintf(pathbuf, BUF_SIZE, "rm -r -d %s", TMPDIR);
-    exec_cmd(pathbuf, "./");
+    char pathBuf[BUF_SIZE];
+    memset(&pathBuf, 0, BUF_SIZE);
+    snprintf(pathBuf, BUF_SIZE, "rm -r -d %s", TMPDIR);
+    exec_cmd(pathBuf, "./");
 
     return 0;
 }
@@ -69,22 +69,22 @@ int exec_set(ActionSet *as, char *tmpdir) {
     return 0;
 }
 
-bool file_exists(char *filepath) {
+bool file_exists(char *filePath) {
   struct stat   buffer;   
-  return (stat(filepath, &buffer) == 0); // if stat works then file exists
+  return (stat(filePath, &buffer) == 0); // if stat works then file exists
 }
 
 void send_new_files(char *path, char **rec, int rk, int client) {
     Message *msg;
-    char pathbuf[BUF_SIZE] = {0};
+    char pathBuf[BUF_SIZE] = {0};
     DIR *folder; // holds the dir
     struct dirent *entry; //holds the file
     struct stat st = {0}; //holds file data
     folder = opendir(path);
 
     while( (entry=readdir(folder))!= NULL ) {
-        snprintf(pathbuf, BUF_SIZE, "%s/%s", path, entry->d_name); // build path
-        if (stat(pathbuf, &st) != -1 && S_ISREG(st.st_mode)) { // if stat succeeds and the object is a file
+        snprintf(pathBuf, BUF_SIZE, "%s/%s", path, entry->d_name); // build path
+        if (stat(pathBuf, &st) != -1 && S_ISREG(st.st_mode)) { // if stat succeeds and the object is a file
             bool exists = false;
             for (int i=0 ; i<rk ; i++) { // then needs to be tested against the requirements
                 if (strcmp(entry->d_name, rec[i]) == 0){
@@ -99,7 +99,7 @@ void send_new_files(char *path, char **rec, int rk, int client) {
                 msg = recieve_data(client);
                 print_message(msg);
                 if (msg->header.type == CODE_OK) {
-                    if (send_bfile(client, pathbuf) < 0) // we then want to send it back as it's an obj file
+                    if (send_bfile(client, pathBuf) < 0) // we then want to send it back as it's an obj file
                         exit(error("send_file() failed", EXIT_FAILURE));
                 }
             }
@@ -134,7 +134,7 @@ void* client_handler(void* c) {
     pathtmp = new_tmpd();
     printf("OPERATING IN DIR \"%s\"\n", pathtmp);
 
-    char pathbuf[BUF_SIZE];
+    char pathBuf[BUF_SIZE];
     bool connected = true;
     uint32_t ncmd;
     char **rec = malloc(sizeof(char *));
@@ -176,24 +176,24 @@ void* client_handler(void* c) {
 
         //  RECIEVE REQ COMMAND
             case CODE_REQ: {
-                memset(&pathbuf, 0, BUF_SIZE);
-                snprintf(pathbuf, BUF_SIZE, "%s/%s", pathtmp, msg->data);
-                if (!file_exists(pathbuf)) {
+                memset(&pathBuf, 0, BUF_SIZE);
+                snprintf(pathBuf, BUF_SIZE, "%s/%s", pathtmp, msg->data);
+                if (!file_exists(pathBuf)) {
 
                     rec[rk++] = strdup(msg->data);
                     rec = realloc(rec, (rk + 1) * sizeof(char *));
 
                     send_data(client, "NEED REQ", CODE_OK);
 
-                    if (strcmp(&pathbuf[strlen(pathbuf) - 2], ".o") == 0) {
-                        if ((recieve_bfile(client, pathbuf) < 0)) {
+                    if (strcmp(&pathBuf[strlen(pathBuf) - 2], ".o") == 0) {
+                        if ((recieve_bfile(client, pathBuf) < 0)) {
                             send_data(client, "FILE RECIEVE FAILED", CODE_FAIL);
                             connected = false;
                             break;
                         }
                     } else {
                         printf("Sending normal file");
-                        if (recieve_file(client, pathbuf) < 0) {
+                        if (recieve_file(client, pathBuf) < 0) {
                             send_data(client, "FILE RECIEVE FAILED", CODE_FAIL);
                             connected = false;
                             break;
@@ -201,7 +201,7 @@ void* client_handler(void* c) {
                     }
                 } else {
                     send_data(client, "DONT NEED REQ", CODE_BAD);
-                    printf("file exists \"%s\"\n", pathbuf);
+                    printf("file exists \"%s\"\n", pathBuf);
                 }
                 break;
             }
@@ -228,9 +228,9 @@ void* client_handler(void* c) {
             }
         }
     }
-    memset(&pathbuf, 0, BUF_SIZE);
-    snprintf(pathbuf, BUF_SIZE, "rm -r -d %s", pathtmp);
-    exec_cmd(pathbuf, "./");
+    memset(&pathBuf, 0, BUF_SIZE);
+    snprintf(pathBuf, BUF_SIZE, "rm -r -d %s", pathtmp);
+    exec_cmd(pathBuf, "./");
 
     puts("Client Disconnected");
     close(client);

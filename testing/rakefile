@@ -2,7 +2,7 @@
 # A typical Rakefile
 
 PORT  = 6044
-HOSTS = 192.168.2.179 hostname2 hostname3:6333
+HOSTS = 192.168.2.179 hostName2 hostName3:6333
 
 
 actionset1:
