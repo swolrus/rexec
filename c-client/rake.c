@@ -44,7 +44,7 @@ Rake *new_rake(char *filename) {
     rtmp->filename = strdup(filename);
     rtmp->port = 0;
     rtmp->hostcount = 0;
-    rtmp->setcount = 0;
+    rtmp->setCount = 0;
     rtmp->hosts = malloc(sizeof(Host *));
     rtmp->sets = malloc(sizeof(ActionSet *));
     return rtmp;
@@ -61,7 +61,7 @@ void free_rake(Rake *r) {
         free(r->hosts[i]);
     }
     free(r->hosts);
-    for (int i=0 ; i<r->setcount ; i++)
+    for (int i=0 ; i<r->setCount ; i++)
         free_set(r->sets[i]);
     free(r);
 }
@@ -77,9 +77,9 @@ void print_rake(Rake *r) {
     for (i=0 ; i<r->hostcount ; i++) {
         print_host(r->hosts[i]);
     }
-    printf("setcount: %d\n", r->setcount);
+    printf("setCount: %d\n", r->setCount);
     printf("\n");
-    for (i=0 ; i<r->setcount ; i++) {
+    for (i=0 ; i<r->setCount ; i++) {
         print_set(r->sets[i], 0);
     }
 }
@@ -173,8 +173,8 @@ Rake *rake_from_file(char *filename) {
                 add_cmd(atmp, current, NULL);
 
         //  ASSIGN THE ACTIONSET
-            rtmp->sets = realloc(rtmp->sets, (rtmp->setcount + 1) * sizeof(atmp));
-            rtmp->sets[rtmp->setcount++] = atmp;
+            rtmp->sets = realloc(rtmp->sets, (rtmp->setCount + 1) * sizeof(atmp));
+            rtmp->sets[rtmp->setCount++] = atmp;
         }
     }
 

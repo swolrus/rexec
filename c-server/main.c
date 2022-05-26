@@ -38,16 +38,16 @@ int main(int argc, char *argv[])
 }
 
 int exec_set(ActionSet *as, char *tmpdir) {
-    ExecPipes pipes[as->localcount];
+    ExecPipes pipes[as->localCount];
 
-    for (int i=0 ; i<as->localcount ; i++) {
+    for (int i=0 ; i<as->localCount ; i++) {
         pipes[i] = exec_cmd(as->local[i]->cmd, tmpdir);
     }
     pid_t wpid;
     char buf[BUF_SIZE];
     do {
         wpid = wait(NULL);
-        for (int i=0 ; pipes[i].pid != wpid && i<as->localcount ; i++) {
+        for (int i=0 ; pipes[i].pid != wpid && i<as->localCount ; i++) {
             buf[0] = '\0';
             fgets(buf, BUF_SIZE, pipes[i].err);
             if (strlen(buf) > 0) {
@@ -136,7 +136,7 @@ void* client_handler(void* c) {
 
     char pathbuf[BUF_SIZE];
     bool connected = true;
-    int ncmd;
+    uint32_t ncmd;
     char **rec = malloc(sizeof(char *));
     int rk = 0;
 
@@ -163,7 +163,7 @@ void* client_handler(void* c) {
 
         //  CLIENT REQUESTING TO SEND AND HAVE EXECUTED AN ACTIONSET
             case CODE_AS_START: {
-                ncmd = atoi(msg->data); // includes the count of actions in data
+                ncmd = (uint32_t) *msg->data;
                 send_data(client, "AWAITING COMMAND SET", CODE_OK);
                 break;
             }
@@ -208,7 +208,7 @@ void* client_handler(void* c) {
         //  CLIENT SIGNALLING ALL ACTIONSET COMMANDS HAVE BEEN SENT
             case CODE_AS_EXECUTE: {
             //  ENSURE WE HAVE RECIEVED ALL ACTION SETS
-                if (ncmd == as->localcount) {
+                if (ncmd == as->localCount) {
                     send_data(client, "RECIEVED, EXECUTING", CODE_OK);
                     int failed;
                     printf("%d\n", failed);

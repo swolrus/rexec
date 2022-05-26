@@ -25,7 +25,7 @@ int main(int argc, char *argv[]) {
     print_rake(rake);
     printf("\nSTARTING EXECUTION\n");
 
-    for (int i=0; i<rake->setcount; i++) {
+    for (int i=0; i<rake->setCount; i++) {
         int wstatus;
         int pid;
 
@@ -57,7 +57,6 @@ int main(int argc, char *argv[]) {
  */
 int negotiate_set(ActionSet *as, char *dirpath) {
     char pathbuf[BUF_SIZE];
-    char itoa[10];
 
     pid_t child_pid;
     int status = 0;
@@ -70,7 +69,7 @@ int negotiate_set(ActionSet *as, char *dirpath) {
 //  LOCAL COMMANDS
 
 //  SPAWN LOCAL PARALLEL PROCESSES TO EXEC ACTIONSET
-    for (int i=0 ; i<as->localcount ; i++) {
+    for (int i=0 ; i<as->localCount ; i++) {
         if ((child_pid = fork()) == 0) {
             if ((status = system(as->local[i]->cmd)) != -1){
                 //printf("%s // EXITED (%d)\n", as->local[i], WEXITSTATUS(status));
@@ -81,8 +80,13 @@ int negotiate_set(ActionSet *as, char *dirpath) {
     }
 
 //  CONFIRM START OF ACTIONSET
-    snprintf(itoa, sizeof(itoa), "%d", as->remotecount);
-    send_data(as->socket, itoa, CODE_AS_START);
+    uint32_t sz = (uint32_t) as->remotecount;
+    response->header.type = CODE_AS_START;
+    response->header.length = sizeof(uint32_t);
+    if (send(as->socket, &response->header, sizeof(HEADER), 0) < 0) // send length
+        exit(error("send() failed", EXIT_FAILURE));
+    if (send(as->socket, &sz, sizeof(uint32_t), 0) < 0) // send length
+        exit(error("send() failed", EXIT_FAILURE));
 
     response = recieve_data(as->socket);
     print_message(response);

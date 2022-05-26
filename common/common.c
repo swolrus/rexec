@@ -47,7 +47,7 @@ ActionSet *new_set(char *name) {
     ActionSet *atmp = NULL;
     atmp = malloc(sizeof(ActionSet));
     atmp->name = strdup(name);
-    atmp->localcount = 0;
+    atmp->localCount = 0;
     atmp->remotecount = 0;
     atmp->local = malloc(1 * sizeof(Command *));
     atmp->remote = malloc(1 * sizeof(Command *));
@@ -73,7 +73,7 @@ void print_set(ActionSet *as, bool remote) {
     int i;
     printf("\n[ %s ]\n", as->name);
     printf("Local:\n");
-    for (i=0 ; i<as->localcount ; i++) {
+    for (i=0 ; i<as->localCount ; i++) {
         if (remote)
             print_cmd(as->local[i], 1);
         else
@@ -126,8 +126,8 @@ void add_cmd(ActionSet *as, char *command, char *requires) {
         as->remote[as->remotecount++] = cmd;
     } else {
     //  AS LOCAL
-        as->local = realloc(as->local, (as->localcount + 2) * sizeof(Command *));
-        as->local[as->localcount++] = cmd;
+        as->local = realloc(as->local, (as->localCount + 2) * sizeof(Command *));
+        as->local[as->localCount++] = cmd;
     }
     
 }

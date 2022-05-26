@@ -54,14 +54,14 @@ typedef struct Rake { // container for a rakefile
     struct Host **hosts;
     int hostcount;
     struct ActionSet **sets;
-    int setcount;
+    int setCount;
 } Rake;
 
 typedef struct ActionSet {
     int socket; // currently executing socket fd
     char *name; // id from heading
     struct Command **local; // local commands
-    int localcount;
+    int localCount;
     struct Command **remote; // remote commands
     int remotecount;
 }ActionSet;
