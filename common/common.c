@@ -164,6 +164,7 @@ void print_cmd(Command *cmd, bool req) {
  * @return         a struct containing the pipes
  */
 ExecPipes exec_cmd(char *command, char *path) {
+    printf("EXEC complete %s @ %s\n", command, path);
     ExecPipes result = {.out = NULL, .err = NULL, .in=NULL};
     //int wstatus;
 

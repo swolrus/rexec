@@ -154,8 +154,6 @@ void send_data(int socket, char *data, int mtype) {
             exit(error("send() failed", EXIT_FAILURE));
     }
 }
-
-
 /**
  * recieve a character file using recieve_data() line by line
  * designed for use with source code as lines over BUF_SIZE will cause stack errors
@@ -229,7 +227,8 @@ int send_file(int socket, char *filepath) {
 }
 
 /**
- * Send binary data as a stream to be be used to send c object files
+ * Send data as a stream
+ * 
  * @param  socket   the sending socket fd
  * @param  filepath the relative path of the target file
  * @return          0 if success -1 if fail
@@ -238,7 +237,7 @@ int recieve_bfile(int socket, char *filepath) {
     FILE *fp;
     uint32_t sz;
 
-    fp = fopen(filepath, "wb+");
+    fp = fopen(filepath, "wb");
     if (fp == NULL)
         return error("invalid filepath", -1);
 
@@ -258,19 +257,27 @@ int recieve_bfile(int socket, char *filepath) {
     printf("wanting %d bytes\n", sz);
 
     // write in binary
-    char file_data[BUF_SIZE / 4] = {0};
+    char file_data[BUF_SIZE] = {0};
     
     uint32_t nbytes = 0;
     uint32_t total = 0;
     while (total < sz) {
-        nbytes = recv(socket, &file_data, sizeof(file_data), 0);
-        if (nbytes > 0) {
-            fwrite(file_data, sizeof (char), nbytes, fp);
-            total += nbytes;
-            printf("received: %d - %d/%d\n", nbytes, total, sz);
-        }
+        size_t rec = sz - total;
+        if (rec > sizeof(file_data)) {rec = sizeof(file_data);}
+
+        if ((nbytes = recv(socket, &file_data, rec, 0)) < 0)
+            exit(error("recv() bfile data failed", EXIT_FAILURE));
+        if (( fwrite(&file_data, sizeof (char), nbytes, fp) ) < 0)
+            exit(error("fwrite() failed", EXIT_FAILURE));
+
+        total += nbytes;
+        printf("received: %d - %d/%d\n", nbytes, total, sz);
+
         memset(&file_data, 0, sizeof(file_data));
     }
+    Message *msg = NULL;
+    msg = recieve_data(socket);
+    print_message(msg);
 
     printf("File '%s' received.\n", filepath);
 
@@ -279,7 +286,8 @@ int recieve_bfile(int socket, char *filepath) {
 }
 
 /**
- * send binary data to be used for such things as c object files
+ * send data as a stream
+ * 
  * @param  socket   the socket fd
  * @param  filepath the target filepath to read and then send
  * @return          0 if success -1 if failed
@@ -288,9 +296,9 @@ int send_bfile(int socket, char *filepath) {
     printf("Sending %s\n", filepath);
     FILE *fp;
     
-    char file_data[BUF_SIZE / 4] = {0};
+    char file_data[BUF_SIZE] = {0};
 
-    fp = fopen(filepath, "rb");
+    fp = fopen(filepath, "rb+");
 
     if (fp == NULL)
         return error("could not open file", -1);
@@ -309,15 +317,15 @@ int send_bfile(int socket, char *filepath) {
 
     // again up to here works
 
-    uint32_t sent = 0;
-    uint32_t nbytes;
-    while ( (fread(&file_data, sizeof(char), sizeof(file_data), fp)) )
+    uint32_t total = 0;
+    uint32_t nbytes = 0;
+    while ( (nbytes = fread(&file_data, sizeof(char), sizeof(file_data), fp)) > 0 )
     {
-        if ((nbytes = send(socket, &file_data, sizeof(file_data), 0)) < 0) // send length
+        if (( send(socket, &file_data, nbytes, 0)) < 0) // send length
             exit(error("send() failed", EXIT_FAILURE));
-        sent += nbytes;
-        printf("sent : '%d'\n", sent);
-        memset(&file_data, 0, sizeof(file_data));
+        total += nbytes;
+        printf("sent: %d - %d/%d\n", nbytes, total, sz);
+        memset(file_data, 0, sizeof(file_data));
     }
     send_data(socket, "", CODE_OK);
 

@@ -13,6 +13,7 @@ int main(int argc, char *argv[])
     if (argc < 3)
         exit(error("no port provided", EXIT_FAILURE));
 
+    srand(time(NULL));
     Host server = { .socket = -1, .hostname = argv[1], .port = atoi(argv[2]) };
 
     h_connect(&server); // populates our struct
@@ -28,6 +29,10 @@ int main(int argc, char *argv[])
             exit(error("pthread_create() failed", EXIT_FAILURE));
     }
     close(server.socket);
+    char pathbuf[BUF_SIZE];
+    memset(&pathbuf, 0, BUF_SIZE);
+    snprintf(pathbuf, BUF_SIZE, "rm -r -d %s", TMPDIR);
+    exec_cmd(pathbuf, "./");
 
     return 0;
 }
@@ -40,35 +45,33 @@ int exec_set(ActionSet *as, char *tmpdir) {
     }
     pid_t wpid;
     char buf[BUF_SIZE];
-    int err = 0, wstatus;
     do {
-        wpid = wait(&wstatus);
+        wpid = wait(NULL);
         for (int i=0 ; pipes[i].pid != wpid && i<as->localcount ; i++) {
             buf[0] = '\0';
             fgets(buf, BUF_SIZE, pipes[i].err);
             if (strlen(buf) > 0) {
                 buf[strcspn(buf, "\n")] = '\0';
                 as->local[i]->err = strdup(buf);
-                as->local[i]->status = WEXITSTATUS(wstatus);
-                ++err;
-                break;
+                as->local[i]->status = 1;
+                return 1;
             } else {
                 buf[0] = '\0';
                 fgets(buf, BUF_SIZE, pipes[i].out);
                 buf[strcspn(buf, "\n")] = '\0';
                 as->local[i]->out = strdup(buf);
-                as->local[i]->status = WEXITSTATUS(wstatus);
+                as->local[i]->status = 0;
                 break;
             }
         }
     } while (wpid > 0);
 
-    return err;
+    return 0;
 }
 
 bool file_exists(char *filepath) {
   struct stat   buffer;   
-  return (stat (filepath, &buffer) == 0); // if stat works then file exists
+  return (stat(filepath, &buffer) == 0); // if stat works then file exists
 }
 
 void send_new_files(char *path, char **rec, int rk, int client) {
@@ -79,7 +82,7 @@ void send_new_files(char *path, char **rec, int rk, int client) {
     struct stat st = {0}; //holds file data
     folder = opendir(path);
 
-    while( (entry=readdir(folder)) ) {
+    while( (entry=readdir(folder))!= NULL ) {
         snprintf(pathbuf, BUF_SIZE, "%s/%s", path, entry->d_name); // build path
         if (stat(pathbuf, &st) != -1 && S_ISREG(st.st_mode)) { // if stat succeeds and the object is a file
             bool exists = false;
@@ -98,17 +101,18 @@ void send_new_files(char *path, char **rec, int rk, int client) {
                 if (msg->header.type == CODE_OK) {
                     if (send_bfile(client, pathbuf) < 0) // we then want to send it back as it's an obj file
                         exit(error("send_file() failed", EXIT_FAILURE));
-                    else
-                        printf("%s\n", entry->d_name);
                 }
             }
         }
     }
+    send_data(client, "", CODE_OUT_END);
+    msg = recieve_data(client);
+    print_message(msg);
+    closedir(folder);
 }
 
 
 int get_cost() {
-    srand(time(NULL));
     int ran;
     ran = rand() % 10;
     return ran;
@@ -126,11 +130,11 @@ void* client_handler(void* c) {
     ActionSet *as = malloc(sizeof(char *));
     as = new_set("ACTIONS");
 
-    char *tpath = NULL;
-    tpath = new_tmpd();
-    printf("OPERATING IN DIR \"%s\"\n", tpath);
+    char *pathtmp = NULL;
+    pathtmp = new_tmpd();
+    printf("OPERATING IN DIR \"%s\"\n", pathtmp);
 
-    char pathbuff[BUF_SIZE];
+    char pathbuf[BUF_SIZE];
     bool connected = true;
     int ncmd;
     char **rec = malloc(sizeof(char *));
@@ -172,21 +176,32 @@ void* client_handler(void* c) {
 
         //  RECIEVE REQ COMMAND
             case CODE_REQ: {
-                memset(&pathbuff, 0, BUF_SIZE);
-                snprintf(pathbuff, BUF_SIZE, "%s/%s", tpath, msg->data);
-                if (!file_exists(pathbuff)) {
+                memset(&pathbuf, 0, BUF_SIZE);
+                snprintf(pathbuf, BUF_SIZE, "%s/%s", pathtmp, msg->data);
+                if (!file_exists(pathbuf)) {
+
+                    rec[rk++] = strdup(msg->data);
+                    rec = realloc(rec, (rk + 1) * sizeof(char *));
+
                     send_data(client, "NEED REQ", CODE_OK);
-                    if ((recieve_file(client, pathbuff) < 0)) {
-                        send_data(client, "FILE RECIEVE FAILED", CODE_FAIL);
-                        connected = false;
-                        break;
+
+                    if (strcmp(&pathbuf[strlen(pathbuf) - 2], ".o") == 0) {
+                        if ((recieve_bfile(client, pathbuf) < 0)) {
+                            send_data(client, "FILE RECIEVE FAILED", CODE_FAIL);
+                            connected = false;
+                            break;
+                        }
                     } else {
-                        rec[rk++] = strdup(msg->data);
-                        rec = realloc(rec, (rk + 1) * sizeof(char *));
+                        printf("Sending normal file");
+                        if (recieve_file(client, pathbuf) < 0) {
+                            send_data(client, "FILE RECIEVE FAILED", CODE_FAIL);
+                            connected = false;
+                            break;
+                        }
                     }
                 } else {
                     send_data(client, "DONT NEED REQ", CODE_BAD);
-                    printf("file exists \"%s\"\n", pathbuff);
+                    printf("file exists \"%s\"\n", pathbuf);
                 }
                 break;
             }
@@ -197,30 +212,25 @@ void* client_handler(void* c) {
                     send_data(client, "RECIEVED, EXECUTING", CODE_OK);
                     int failed;
                     printf("%d\n", failed);
-                    if ((failed = exec_set(as, tpath)) > 0) { // execute inside the tmpdir
+                    if (( failed = exec_set(as, pathtmp) ) < 0) { // execute inside the tmpdir
                         puts("actionset finished executing unsuccessfully");
                         send_data(client, as->local[failed]->err, CODE_ACTION_STATUS + failed);
                     } else {
                         puts("actionset finished executing successfully");
-
-
-                        send_new_files(tpath, rec, rk, client);
-
-                        send_data(client, "SENT OUT", CODE_OUT_END);
+                        send_new_files(pathtmp, rec, rk, client);
                     }
             //  OTHERWISE ALERT CLIENT
                 } else {
                     send_data(client, "INCOMPLETE SET", CODE_FAIL);
                     connected = false;
                 }
-                print_set(as, 1);
                 break;
             }
         }
     }
-    memset(&pathbuff, 0, BUF_SIZE);
-    snprintf(pathbuff, BUF_SIZE, "rm -r -d %s", tpath);
-    exec_cmd(pathbuff, "./");
+    memset(&pathbuf, 0, BUF_SIZE);
+    snprintf(pathbuf, BUF_SIZE, "rm -r -d %s", pathtmp);
+    exec_cmd(pathbuf, "./");
 
     puts("Client Disconnected");
     close(client);
